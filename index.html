@@ -2,12 +2,34 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OmniTicket</title>
-  <link rel="stylesheet" href="/index.css">
-</head>
-  <body>
+    <!-- Tailwind CSS with dark mode support -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              primary: '#0ea5e9',
+              secondary: '#8b5cf6',
+              dark: {
+                900: '#0f172a',
+                800: '#1e293b',
+                700: '#334155',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+  </head>
+  <body class="bg-dark-900 text-white">
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script> <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>
