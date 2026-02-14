@@ -4,10 +4,10 @@ FROM node:22-alpine
 # Set working directory
 WORKDIR /app
 
-# Copy package.json
+# Copy package.json only first (for better caching)
 COPY package.json ./
 
-# Install dependencies
+# Install all dependencies including devDependencies
 RUN npm install
 
 # Copy source code
@@ -17,4 +17,4 @@ COPY . .
 EXPOSE 5173
 
 # Command to run the application
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
