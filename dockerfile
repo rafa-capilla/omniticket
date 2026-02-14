@@ -13,11 +13,8 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build the project
-RUN npm run build
-
 # Expose port
 EXPOSE 5173
 
 # Command to run the application
-CMD ["npm", "run", "preview"]
+CMD ["npm", "run", "dev"]
