@@ -1,4 +1,3 @@
-
 import { OmniSettings } from '../types';
 
 export class ConfigService {
