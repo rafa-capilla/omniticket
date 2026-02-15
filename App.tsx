@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { GoogleAuthService } from './services/GoogleAuthService';
 import { SyncEngine } from './services/SyncEngine';
@@ -69,7 +68,6 @@ const App: React.FC = () => {
 
   const bootstrapConfig = useCallback(async (accessToken: string) => {
     setAppState('LOADING');
-    setProgressMsg("Autenticando...");
     try {
       const config = new ConfigService(accessToken);
       const { dbId: id } = await config.ensureDatabase();
