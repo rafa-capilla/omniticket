@@ -6,6 +6,16 @@ import { ConfigService } from "./ConfigService";
 import { ticketSchema } from "../schemas/ticketSchema";
 import { SyncResult } from "../types";
 
+/**
+ * Motor de sincronización principal de OmniTicket.
+ * Orquesta el proceso completo: Gmail → Gemini AI → Google Sheets
+ *
+ * Flujo:
+ * 1. Busca emails en Gmail con label configurado (ej: "OmniTicket")
+ * 2. Por cada email: extrae contenido, analiza con Gemini, valida con Zod
+ * 3. Guarda líneas de ticket en Spreadsheet "Gastos"
+ * 4. Marca email como procesado con label "OmniTicket/Procesado"
+ */
 export class SyncEngine {
   private gmail: GmailService;
   private sheets: SheetsService;
@@ -17,6 +27,13 @@ export class SyncEngine {
     this.config = new ConfigService(accessToken);
   }
 
+  /**
+   * Ejecuta el proceso completo de sincronización de tickets desde Gmail.
+   *
+   * @param onProgress - Callback opcional para reportar progreso en tiempo real
+   * @returns Array de resultados (success/error) por cada thread procesado
+   * @throws Error si falla la conexión con APIs de Google
+   */
   async runSync(onProgress?: (msg: string) => void): Promise<SyncResult[]> {
     onProgress?.("Validando conexión con base de datos...");
     const settings = await this.config.getSettings();
@@ -61,6 +78,14 @@ export class SyncEngine {
     return results;
   }
 
+  /**
+   * Extrae datos estructurados de un email de ticket usando Gemini AI.
+   *
+   * @param emailContent - Contenido raw del email (HTML + texto)
+   * @param uuid - UUID único para identificar el ticket
+   * @returns TicketData validado con Zod schema
+   * @throws Error si Gemini falla o el JSON no pasa validación
+   */
   private async extractDataWithAI(emailContent: string, uuid: string) {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({

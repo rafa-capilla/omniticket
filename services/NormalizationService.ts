@@ -2,13 +2,30 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { ProductMapping } from "../types";
 import { SheetsService } from "./SheetsService";
 
+/**
+ * Servicio de normalización de nombres de productos usando Gemini AI.
+ *
+ * Sistema de 3 niveles:
+ * 1. Reglas de usuario (prioridad alta) - pattern matching manual
+ * 2. Caché de normalizaciones previas - evita llamadas redundantes a Gemini
+ * 3. Gemini AI (último recurso) - normalización inteligente en batches de 30
+ *
+ * Objetivo: Convertir "COCA COLA ZERO 2L PET" → "Coca Cola Zero 2L"
+ */
 export class NormalizationService {
   constructor(
     private sheets: SheetsService, 
     private spreadsheetId: string,
-    private apiKey: string
   ) {}
 
+  /**
+   * Normaliza una lista de nombres de productos.
+   * Respeta jerarquía: reglas de usuario > caché > Gemini AI.
+   *
+   * @param productNames - Array de nombres raw de productos
+   * @returns Map con mappings original → normalizado
+   * @throws Error si Gemini falla o no responde correctamente
+   */
   async normalizeProducts(productNames: string[]): Promise<Map<string, string>> {
     const rules = await this.sheets.getRules(this.spreadsheetId);
     const existingMappings = await this.sheets.getMappings(this.spreadsheetId);

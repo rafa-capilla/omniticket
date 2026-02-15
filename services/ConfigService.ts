@@ -1,5 +1,13 @@
 import { OmniSettings } from '../types';
 
+/**
+ * Servicio de gestión de configuración persistente en Google Sheets.
+ *
+ * Responsabilidades:
+ * - Buscar/crear el spreadsheet "OmniTicket_DB" en Google Drive del usuario
+ * - Leer/actualizar configuración desde hoja "Settings"
+ * - Gestionar API keys y timestamps de sincronización
+ */
 export class ConfigService {
   private static readonly FILENAME = 'OmniTicket_DB';
   private spreadsheetId: string | null = null;
@@ -20,6 +28,13 @@ export class ConfigService {
     return this.spreadsheetId;
   }
 
+  /**
+   * Asegura que la base de datos (spreadsheet) existe y está inicializada.
+   * Si no existe, la crea con la estructura completa de hojas y headers.
+   *
+   * @returns Settings del usuario y el ID del spreadsheet
+   * @throws Error si hay problema de autenticación (401)
+   */
   async ensureDatabase(): Promise<{ settings: OmniSettings, dbId: string }> {
     let id: string;
     try {

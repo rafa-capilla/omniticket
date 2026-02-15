@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+dist-ssr/
+
+# Environment variables
+.env*
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Git
+.git/
+
+# Cache and temp files
+.aider*
+*.local
+
+# Docker
+dockerfile
+docker-compose.yml
+.dockerignore
+
+# Test files (when added)
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# Documentation that Claude already knows
+README.md
+
+# GitHub workflows (not relevant for coding tasks)
+.github/
