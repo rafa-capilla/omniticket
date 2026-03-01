@@ -1,0 +1,5 @@
+{
+  "name": "OmniTicket",
+  "description": "A powerful serverless expense tracker that syncs Gmail tickets directly to Google Sheets using Gemini AI for intelligent extraction.",
+  "requestFramePermissions": []
+}

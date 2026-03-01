@@ -1,0 +1,11 @@
+services:
+  omniticket:
+    build: .
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+    environment:
+      - NODE_ENV=development
+    stdin_open: true
+    tty: true
