@@ -1,63 +1,104 @@
 
+import { apiFetch } from './apiFetch';
+
+/**
+ * Extrae texto de un payload de Gmail de forma recursiva.
+ * Prioriza text/plain > text/html > recursión en sub-partes multipart.
+ */
+function extractTextFromPayload(payload: any): string {
+  // Caso base: el payload tiene body con datos directamente
+  if (payload.body?.data) {
+    try {
+      return atob(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+    } catch {
+      return '';
+    }
+  }
+
+  const parts: any[] = payload.parts || [];
+  if (parts.length === 0) return '';
+
+  // Prioridad 1: text/plain (ideal para Gemini, sin ruido de HTML)
+  const plain = parts.find(p => p.mimeType === 'text/plain');
+  if (plain) return extractTextFromPayload(plain);
+
+  // Prioridad 2: text/html
+  const html = parts.find(p => p.mimeType === 'text/html');
+  if (html) return extractTextFromPayload(html);
+
+  // Prioridad 3: descender recursivamente en sub-partes (multipart/alternative, multipart/mixed, etc.)
+  for (const part of parts) {
+    const text = extractTextFromPayload(part);
+    if (text) return text;
+  }
+
+  return '';
+}
+
 export class GmailService {
   constructor(private accessToken: string) {}
 
   async searchThreads(query: string): Promise<string[]> {
-    const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(query)}`, {
-      headers: { Authorization: `Bearer ${this.accessToken}` }
-    });
+    const response = await apiFetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(query)}`,
+      { headers: { Authorization: `Bearer ${this.accessToken}` } }
+    );
     const data = await response.json();
     return (data.threads || []).map((t: any) => t.id);
   }
 
   async getThreadContent(threadId: string): Promise<string> {
-    const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`, {
-      headers: { Authorization: `Bearer ${this.accessToken}` }
-    });
+    const response = await apiFetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`,
+      { headers: { Authorization: `Bearer ${this.accessToken}` } }
+    );
     const data = await response.json();
-    
-    // Concatenate all messages in thread to get full context
-    let fullText = "";
-    data.messages.forEach((msg: any) => {
-      const part = msg.payload.parts ? msg.payload.parts[0] : msg.payload;
-      if (part.body && part.body.data) {
-        fullText += atob(part.body.data.replace(/-/g, '+').replace(/_/g, '/'));
-      }
-    });
-    
+
+    // Concatenar el texto de todos los mensajes del thread
+    let fullText = '';
+    for (const msg of (data.messages || [])) {
+      const text = extractTextFromPayload(msg.payload || {});
+      if (text) fullText += text + '\n';
+    }
+
     return fullText;
   }
 
   async addLabelToThread(threadId: string, labelName: string) {
     const labelId = await this.getOrCreateLabel(labelName);
-    await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}/modify`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        addLabelIds: [labelId]
-      })
-    });
+    await apiFetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}/modify`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ addLabelIds: [labelId] })
+      }
+    );
   }
 
   private async getOrCreateLabel(name: string): Promise<string> {
-    const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels', {
-      headers: { Authorization: `Bearer ${this.accessToken}` }
-    });
+    const response = await apiFetch(
+      'https://gmail.googleapis.com/gmail/v1/users/me/labels',
+      { headers: { Authorization: `Bearer ${this.accessToken}` } }
+    );
     const data = await response.json();
     const existing = data.labels.find((l: any) => l.name === name);
     if (existing) return existing.id;
 
-    const createResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ name, labelListVisibility: 'labelShow', messageListVisibility: 'show' })
-    });
+    const createResponse = await apiFetch(
+      'https://gmail.googleapis.com/gmail/v1/users/me/labels',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name, labelListVisibility: 'labelShow', messageListVisibility: 'show' })
+      }
+    );
     const created = await createResponse.json();
     return created.id;
   }

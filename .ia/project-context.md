@@ -8,70 +8,89 @@ OmniTicket es una aplicación web que permite a los usuarios controlar de forma 
 ### Stack
 - **Frontend**: React 18.3 + TypeScript
 - **Build Tool**: Vite 6.0
-- **Styling**: Tailwind CSS 3.4
+- **Styling**: Tailwind CSS 3.4 — compilado en build-time via PostCSS (`tailwind.config.js` + `postcss.config.js`). **No se usa CDN.**
 - **Visualización**: Recharts 3.7
-- **Validación**: Zod 4.3
-- **IA**: Google Gemini AI (@google/genai 1.41)
+- **Validación**: Zod 4.3 (solo para el schema de tickets de Gemini)
+- **IA**: Google Gemini AI (`@google/genai` 1.41)
 
 ### Estructura del Proyecto
 ```
 omniticket/
-├── services/          # Lógica de negocio y servicios
-│   ├── SyncEngine.ts          # Motor de sincronización Gmail → Sheets
-│   ├── ConfigService.ts       # Gestión de configuración en Spreadsheet
-│   ├── NormalizationService.ts # Normalización de productos con Gemini
-│   ├── GmailService.ts        # Integración con Gmail API
-│   ├── SheetsService.ts       # Integración con Google Sheets API
-│   └── GoogleAuthService.ts   # Gestión de OAuth 2.0
+├── services/                    # Lógica de negocio y servicios
+│   ├── apiFetch.ts              # Helper HTTP centralizado (verifica response.ok, maneja 401/429)
+│   ├── retry.ts                 # withRetry() con backoff exponencial para errores 429
+│   ├── SyncEngine.ts            # Motor de sincronización Gmail → Gemini → Sheets
+│   ├── ConfigService.ts         # Gestión de configuración y bootstrap del spreadsheet
+│   ├── AIAnalysisService.ts     # Análisis libre con Gemini (lente "Análisis")
+│   ├── GmailService.ts          # Integración con Gmail API
+│   ├── SheetsService.ts         # Integración con Google Sheets API
+│   └── GoogleAuthService.ts     # Gestión de OAuth 2.0 + silent refresh
+├── components/                  # Componentes React separados
+│   ├── HistoryView.tsx          # Vista de tickets históricos (solo presentación)
+│   ├── RulesView.tsx            # CRUD de reglas de categorización
+│   ├── CategoriesManager.tsx    # CRUD de categorías
+│   ├── LensesView.tsx           # KPIs + gráficos + selector de lente
+│   ├── AIAnalysisView.tsx       # Interfaz de análisis libre con Gemini
+│   ├── SettingsView.tsx         # Vista de configuración
+│   └── ToastList.tsx            # Sistema de notificaciones toast
+├── contexts/
+│   └── AppContext.tsx           # Context de React (token, dbId, toast, loadData)
+├── lib/
+│   └── utils.ts                 # Helpers compartidos: safeText, safeNum, COLORS
 ├── schemas/
-│   └── ticketSchema.ts        # Esquema Zod para validación de tickets
-├── types.ts           # Tipos TypeScript compartidos
-├── App.tsx            # Componente principal y vistas
-└── index.tsx          # Entry point
+│   └── ticketSchema.ts          # Schema Zod para validación de respuesta de Gemini
+├── types.ts                     # Tipos TypeScript compartidos
+├── App.tsx                      # Orchestrador principal (~316 líneas)
+├── index.tsx                    # Entry point
+├── index.css                    # Tailwind directives + utilidades custom
+├── tailwind.config.js           # Configuración de Tailwind (content paths, animaciones)
+└── postcss.config.js            # PostCSS (tailwindcss + autoprefixer)
 ```
 
 ## Flujo Principal de Funcionamiento
 
 ### 1. Autenticación (GoogleAuthService)
-- Usuario se conecta vía OAuth 2.0 de Google
-- Scopes requeridos: Gmail (lectura), Google Sheets (escritura/lectura), Drive (crear/buscar archivos)
-- Access token se almacena en memoria para toda la sesión
+- Usuario se conecta vía OAuth 2.0 de Google (flujo implícito)
+- Scopes requeridos: `gmail.modify`, `spreadsheets`, `drive.file`
+- Access token se guarda en `localStorage` (`google_access_token`) con timestamp de expiración (`google_token_expires_at`)
+- `silentRefresh()` se ejecuta automáticamente cada 60s si el token expira en menos de 5 min
+- Botón "Reconectar" en el header permite renovar token manualmente sin hacer logout
 
 ### 2. Inicialización de Base de Datos (ConfigService)
 - Se busca/crea un spreadsheet llamado "OmniTicket_DB" en Google Drive del usuario
+- `isBootstrapped` ref en App.tsx evita re-ejecutar este paso cuando el token se renueva silenciosamente
 - Estructura del Spreadsheet:
-  - **Settings**: Configuración (labels Gmail, API key Gemini, última sincronización)
-  - **Gastos**: Líneas de productos de todos los tickets procesados
+  - **Config** (antes llamada "Settings"): Configuración (labels Gmail, API key Gemini)
+  - **Gastos**: Líneas de productos de todos los tickets procesados (10 columnas, A:J)
+  - **Historial**: Resumen de tickets procesados
   - **Rules**: Reglas de categorización definidas por el usuario
-  - **Mapping_Cache**: Caché de normalizaciones realizadas por Gemini
+  - **Categorias**: Categorías activas/inactivas gestionadas por el usuario
 
 ### 3. Sincronización de Tickets (SyncEngine)
-1. Busca emails en Gmail con label "OmniTicket" (configurable) no procesados
-2. Por cada email encontrado:
-   - Extrae el contenido del thread
+1. Busca emails en Gmail con label configurable (default: "OmniTicket") sin label "Procesado"
+2. Por cada email encontrado (**procesamiento secuencial, uno a la vez**):
+   - Extrae el contenido del thread con parser multipart recursivo
    - Envía el contenido a Gemini AI con schema estructurado
-   - Gemini responde con JSON estructurado: tienda, fecha, items[], total_ticket
+   - Gemini responde con JSON: tienda, fecha, items[], total_ticket — extrae Y normaliza en una sola llamada
    - Valida con Zod (ticketSchema)
    - Guarda las líneas del ticket en hoja "Gastos"
    - Marca el email con label "OmniTicket/Procesado"
-3. Actualiza timestamp de última sincronización
+   - Informa del resultado (éxito o error) individualmente por ticket
+3. Las llamadas a Gemini usan `withRetry()` con backoff exponencial (1s/2s/4s) para errores 429
 
-### 4. Normalización con IA (NormalizationService)
-- Gemini analiza nombres de productos raw (ej: "COCA COLA 2L PET") y los simplifica (ej: "Coca Cola 2L")
-- Sistema de caché: evita procesar productos ya normalizados
-- Sistema de reglas: el usuario puede definir patrones para override automático
-- Batch processing: procesa hasta 30 productos por llamada
+> **Diseño deliberado**: El procesamiento es secuencial (no paralelo) para: (1) reducir alucinaciones en tickets grandes, (2) poder marcar cada ticket como "Procesado" solo si tiene éxito, (3) facilitar el seguimiento de errores por ticket.
 
-### 5. Visualización en "Lentes" (App.tsx)
-Tres tipos de lentes (vistas analíticas):
-- **Products**: Gasto agrupado por producto normalizado
-- **Categories**: Gasto agrupado por categoría (Lácteos, Bebidas, etc.)
-- **Stores**: Gasto agrupado por establecimiento
+### 4. Lentes Analíticas (LensesView)
+Cuatro tipos de lentes (vistas analíticas):
+- **Products**: Gasto agrupado por nombre normalizado del producto (col J de Gastos)
+- **Categories**: Gasto agrupado por categoría (Pie chart)
+- **Stores**: Gasto agrupado por establecimiento (col B de Gastos)
+- **Análisis**: Análisis libre en lenguaje natural vía Gemini (AIAnalysisView)
 
 Dashboards incluyen:
 - KPIs: Gasto total, ticket promedio, categoría top, número de tickets
 - Gráficos: Pie chart para categorías, bar charts para productos/tiendas
-- Filtros: Rango de fechas configurable
+- Filtros: Rango de fechas configurable (default: últimos 30 días)
 - Tabla detallada con % de impacto sobre gasto total
 
 ## Modelo de Datos
@@ -79,7 +98,7 @@ Dashboards incluyen:
 ### TicketData (de Gemini)
 ```text
 {
-  id: string           // UUID generado
+  id: string           // UUID generado por el código, no por Gemini
   tienda: string       // Nombre del establecimiento
   fecha: string        // YYYY-MM-DD
   items: TicketItem[]  // Líneas de productos
@@ -90,11 +109,11 @@ Dashboards incluyen:
 ### TicketItem
 ```text
 {
-  nombre: string            // Nombre del producto
-  categoria: string         // Una de las 7 categorías permitidas
+  nombre: string            // Nombre del producto (Gemini extrae y normaliza en una sola pasada)
+  categoria: string         // Categoría según las del spreadsheet
   precio_unitario: number
   cantidad: number
-  descuento: number        // Valor positivo
+  descuento: number        // Valor positivo (ej: 2€ de descuento = 2, no -2)
   precio_total_linea: number
 }
 ```
@@ -102,65 +121,98 @@ Dashboards incluyen:
 ### Rule (Reglas de usuario)
 ```text
 {
-  pattern: string       // Texto a buscar (case-insensitive)
+  pattern: string       // Texto a buscar (case-insensitive, contains)
   normalized: string    // Nombre normalizado
-  category: string      // Categoría asignada
+  category: string      // Categoría asignada (máxima prioridad sobre Gemini)
+}
+```
+
+### Category (Categorías gestionadas por el usuario)
+```text
+{
+  name: string          // Nombre único de la categoría
+  description: string   // Descripción opcional
+  status: 'active' | 'inactive'
 }
 ```
 
 ## Servicios Clave
 
+### apiFetch (services/apiFetch.ts)
+Helper HTTP centralizado que envuelve `fetch()`:
+- Verifica `response.ok` tras cada llamada
+- Lanza `Error("401")` en respuestas 401 → App.tsx lo captura y muestra toast de sesión expirada
+- Extrae el mensaje de error del body JSON de Google para errores 4xx/5xx descriptivos
+- Todos los servicios (Gmail, Sheets, Config) usan `apiFetch` en lugar de `fetch` directamente
+
+### withRetry (services/retry.ts)
+Retry con backoff exponencial: 1s → 2s → 4s, máximo 3 intentos.
+Solo reintenta en errores de rate-limit (429 / "Rate limit"). Otros errores se propagan inmediatamente.
+
 ### SyncEngine
-Motor principal que orquesta todo el proceso de sincronización:
-- Coordina Gmail, Sheets, y Gemini AI
-- Maneja errores por ticket individual
-- Reporta progreso en tiempo real
-- Utiliza `gemini-2.5-pro` con schema estructurado
+Motor principal de sincronización. Coordina Gmail → Gemini → Sheets de forma secuencial.
+- Llama a `extractDataWithAI()` con `withRetry()` por si hay rate-limit de Gemini
+- Reporta progreso ticket a ticket: `"✓ Ticket (2/5): Mercadona (2025-01-15)"`
+- Resumen final: "X OK, Y con error"
 
 ### ConfigService
-Gestiona la configuración persistente en el Spreadsheet del usuario:
-- Busca/crea el spreadsheet "OmniTicket_DB"
-- Lee/actualiza settings (labels, API keys, timestamps)
-- Maneja errores 401 para logout automático
+- Busca/crea el spreadsheet "OmniTicket_DB" (sistema de migraciones idempotente)
+- Lee/actualiza settings (labels Gmail, API key Gemini)
+- La API key de Gemini **se lee del spreadsheet** en tiempo de ejecución (no de variables de entorno)
 
-### NormalizationService
-Normaliza nombres de productos usando Gemini:
-- Respeta reglas del usuario (priority)
-- Usa caché para evitar llamadas redundantes
-- Procesa en batches de 30 productos max
-- Guarda mappings en hoja "Mapping_Cache"
+### AIAnalysisService
+Análisis libre con Gemini para la lente "Análisis":
+- Recibe un prompt del usuario + datos agregados (por categoría, producto, tienda)
+- Usa `withRetry()` para tolerar rate-limits
+- Devuelve: texto de análisis + datos para un gráfico (pie o bar)
+- **No es** el servicio que extrae tickets (eso lo hace SyncEngine directamente)
 
 ### SheetsService
 Abstrae operaciones con Google Sheets API:
-- appendExpense: añade líneas de ticket
-- fetchAllLineItems: lee todas las líneas de gastos
-- fetchHistory: obtiene resumen de tickets
-- getMappings/saveMappings: gestiona caché de normalización
-- getRules/addRule: gestiona reglas de usuario
+- `appendExpense`: añade líneas de ticket (A:J, 10 columnas)
+- `fetchAllLineItems`: lee todas las líneas de gastos
+- `fetchHistory`: obtiene resumen de tickets del Historial
+- `getRules/addRule/updateRule/deleteRule`: gestiona reglas
+- `getCategories/addCategory/updateCategory/deleteCategory`: gestiona categorías
+- `updateCategoryInGastos`: reasigna productos a otra categoría al borrar una
 
 ### GmailService
-Abstrae operaciones con Gmail API:
-- searchThreads: busca emails por query
-- getThreadContent: extrae contenido completo de thread
-- addLabelToThread: marca emails como procesados
+- `searchThreads`: busca threads por query (label configurable)
+- `getThreadContent`: extrae texto del thread con `extractTextFromPayload()` — búsqueda **recursiva** en la estructura multipart: prefiere `text/plain` > `text/html` > recursión en sub-partes. Itera **todos** los mensajes del thread y concatena el texto.
+- `addLabelToThread`: añade label "Procesado" al thread
+
+### GoogleAuthService
+- `init()`: inicializa el cliente OAuth con callback que guarda token en localStorage
+- `login()`: abre el popup OAuth con `prompt: 'consent'`
+- `silentRefresh()`: renueva el token sin UI con `prompt: ''`
+- `isTokenExpiringSoon()`: comprueba si queda menos de 5 min para expiración
+- `logout()`: limpia localStorage (token + expiresAt)
 
 ## Consideraciones de Seguridad
-- API Key de Gemini se guarda en el Spreadsheet del usuario (no en servidor)
-- OAuth access token solo en memoria del navegador
+- API Key de Gemini se guarda en el Spreadsheet del usuario (no en servidor ni en código)
+- OAuth access token guardado en `localStorage` con timestamp de expiración
+- Content-Security-Policy en `index.html`: limita orígenes a los dominios de Google APIs
 - No hay backend: toda la lógica corre client-side
 - Los datos nunca salen del ecosistema Google del usuario
 
+## Sistema de Notificaciones
+Los errores y mensajes se muestran con **toasts** (no `alert()`):
+- Variantes: `success` (verde), `error` (rojo), `info` (gris oscuro)
+- Auto-dismiss tras 5 segundos
+- Máximo 3 simultáneos (cola FIFO)
+- Disponibles en todos los componentes via `useApp().toast`
+
 ## Convenciones de Código
 - Componentes React funcionales con hooks
-- TypeScript estricto con validación Zod
-- Tailwind CSS con utility-first approach
+- TypeScript estricto con validación Zod (solo para tickets de Gemini)
+- Tailwind CSS build-time (utility-first)
 - Nombres de archivos: PascalCase para servicios y componentes
-- Manejo de errores: try/catch con mensajes descriptivos
-- Funciones helper: safeText() y safeNum() para sanitización
+- Manejo de errores: try/catch con mensajes descriptivos, toast al usuario
+- `safeText()` y `safeNum()` desde `lib/utils.ts` para sanitizar valores de Sheets
+- Contexto `AppContext`: provee `token`, `dbId`, `toast`, `loadData` a todos los componentes via `useApp()`
 
 ## Limitaciones Conocidas
-- Depende de Gemini AI en preview (puede cambiar schema)
-- Procesamiento síncrono (un ticket a la vez)
-- Sin backend: no hay autenticación persistente
+- Depende de Gemini AI (puede cambiar schema o comportamiento)
+- Sin backend: no hay autenticación persistente ni rate-limiting propio
 - Sin gestión de múltiples usuarios o workspaces
-- Hardcoded CLIENT_ID en código fuente
+- CLIENT_ID hardcoded en `App.tsx` (normal para OAuth client-side)

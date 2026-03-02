@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AggregatedData, AIAnalysisResult } from "../types";
+import { withRetry } from "./retry";
 
 /**
  * Servicio de análisis libre de gastos usando Gemini AI.
@@ -24,48 +25,49 @@ ${data.byProduct.slice(0, 50).map(p => `- ${p.name}: ${p.total.toFixed(2)}€`).
 POR TIENDA:
 ${data.byStore.map(s => `- ${s.name}: ${s.total.toFixed(2)}€`).join('\n')}`;
 
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
-      contents: `${prompt}\n\n${dataContext}`,
-      config: {
-        systemInstruction: `Eres un experto en análisis de gastos de supermercado. Analiza los datos del usuario y responde a su consulta de forma concisa, útil y en español.
+    return withRetry(async () => {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: `${prompt}\n\n${dataContext}`,
+        config: {
+          systemInstruction: `Eres un experto en análisis de gastos de supermercado. Analiza los datos del usuario y responde a su consulta de forma concisa, útil y en español.
 Genera también datos para un gráfico que ilustre tu análisis: elige 'pie' para distribuciones proporcionales o 'bar' para comparaciones de magnitud.
 Los valores en chart_data deben ser numéricos (importes en euros). Incluye entre 3 y 8 elementos en chart_data.`,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            analysis_text: { type: Type.STRING },
-            chart_type: { type: Type.STRING },
-            chart_data: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  value: { type: Type.NUMBER }
-                },
-                required: ["name", "value"]
-              }
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              analysis_text: { type: Type.STRING },
+              chart_type: { type: Type.STRING },
+              chart_data: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    value: { type: Type.NUMBER }
+                  },
+                  required: ["name", "value"]
+                }
+              },
+              chart_title: { type: Type.STRING }
             },
-            chart_title: { type: Type.STRING }
-          },
-          required: ["analysis_text", "chart_type", "chart_data", "chart_title"]
+            required: ["analysis_text", "chart_type", "chart_data", "chart_title"]
+          }
         }
+      });
+
+      try {
+        const result = JSON.parse(response.text || "{}");
+        if (result.chart_type !== 'pie' && result.chart_type !== 'bar') {
+          result.chart_type = 'bar';
+        }
+        return result as AIAnalysisResult;
+      } catch (e) {
+        console.error("Error parsing AI analysis response:", response.text);
+        throw new Error("Respuesta de IA inválida");
       }
     });
-
-    try {
-      const result = JSON.parse(response.text || "{}");
-      // Normalize chart_type to valid values
-      if (result.chart_type !== 'pie' && result.chart_type !== 'bar') {
-        result.chart_type = 'bar';
-      }
-      return result as AIAnalysisResult;
-    } catch (e) {
-      console.error("Error parsing AI analysis response:", response.text);
-      throw new Error("Respuesta de IA inválida");
-    }
   }
 }

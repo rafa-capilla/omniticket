@@ -4,11 +4,16 @@ import { GmailService } from "./GmailService";
 import { SheetsService } from "./SheetsService";
 import { ConfigService } from "./ConfigService";
 import { ticketSchema } from "../schemas/ticketSchema";
+import { withRetry } from "./retry";
 import { SyncResult, OmniSettings, Category, Rule } from "../types";
 
 /**
  * Motor de sincronización principal de OmniTicket.
  * Orquesta: Gmail → Gemini AI (extracción + normalización integrada) → Google Sheets
+ * Procesamiento secuencial (1 ticket a la vez) para:
+ * - Reducir alucinaciones en tickets grandes
+ * - Marcar como "Procesado" solo los tickets que tuvieron éxito
+ * - Llevar un conteo preciso de éxitos y errores
  */
 export class SyncEngine {
   private gmail: GmailService;
@@ -42,30 +47,50 @@ export class SyncEngine {
     }
 
     const results: SyncResult[] = [];
-    let count = 1;
-    for (const threadId of threadIds) {
+    const total = threadIds.length;
+
+    for (let i = 0; i < total; i++) {
+      const threadId = threadIds[i];
+      const ticketNum = `(${i + 1}/${total})`;
+
       try {
-        onProgress?.(`Procesando ticket ${count} de ${threadIds.length}...`);
+        onProgress?.(`Leyendo email ${ticketNum}...`);
         const content = await this.gmail.getThreadContent(threadId);
         const ticketUuid = crypto.randomUUID();
 
-        onProgress?.(`Analizando con Gemini (${count}/${threadIds.length})...`);
-        const ticketData = await this.extractDataWithAI(content, ticketUuid, settings, categories, rules);
+        onProgress?.(`Analizando con Gemini ${ticketNum}...`);
+        const ticketData = await withRetry(
+          () => this.extractDataWithAI(content, ticketUuid, settings, categories, rules),
+        );
 
-        onProgress?.(`Guardando datos en Sheets...`);
+        onProgress?.(`Guardando en Sheets ${ticketNum}...`);
         await this.sheets.appendExpense(spreadsheetId, ticketData);
+
+        // Solo se marca como procesado si todo fue bien
         await this.gmail.addLabelToThread(threadId, settings.GMAIL_PROCESSED_LABEL);
 
         results.push({ messageId: threadId, status: 'success' });
-        count++;
+        onProgress?.(`✓ Ticket ${ticketNum}: ${ticketData.tienda} (${ticketData.fecha})`);
       } catch (error: any) {
+        const msg = String(error?.message || error);
         console.error(`Error en thread ${threadId}:`, error);
-        results.push({ messageId: threadId, status: 'error', error: String(error.message || error) });
+        results.push({ messageId: threadId, status: 'error', error: msg });
+        onProgress?.(`✗ Ticket ${ticketNum}: ${msg}`);
+        // Pausa breve antes del siguiente para no saturar la API tras un error
+        await new Promise(r => setTimeout(r, 500));
       }
     }
 
     await this.config.updateLastSync();
-    onProgress?.("¡Sincronización exitosa!");
+
+    const succeeded = results.filter(r => r.status === 'success').length;
+    const failed = results.filter(r => r.status === 'error').length;
+    if (failed === 0) {
+      onProgress?.(`¡Sincronización completada! ${succeeded} ticket${succeeded !== 1 ? 's' : ''} procesado${succeeded !== 1 ? 's' : ''}.`);
+    } else {
+      onProgress?.(`Sync terminado: ${succeeded} OK, ${failed} con error.`);
+    }
+
     return results;
   }
 
@@ -88,7 +113,9 @@ export class SyncEngine {
 
     const activeCategories = categories.filter(c => c.status === 'active');
     const fallbackCategories = ['Lácteos', 'Carne', 'Fruta/Verdura', 'Limpieza', 'Bebidas', 'Higiene', 'Otros'];
-    const categoriesToUse = activeCategories.length > 0 ? activeCategories : fallbackCategories.map(name => ({ name, description: '', status: 'active' as const }));
+    const categoriesToUse = activeCategories.length > 0
+      ? activeCategories
+      : fallbackCategories.map(name => ({ name, description: '', status: 'active' as const }));
 
     const categoryList = categoriesToUse
       .map(c => c.description ? `- ${c.name}: ${c.description}` : `- ${c.name}`)

@@ -1,4 +1,5 @@
 import { OmniSettings } from '../types';
+import { apiFetch } from './apiFetch';
 
 const DEFAULT_CATEGORIES = [
   ['Lácteos', 'Leche, yogures, quesos, mantequilla, nata', 'active'],
@@ -22,10 +23,10 @@ export class ConfigService {
   async getOrFindId(): Promise<string> {
     if (this.spreadsheetId) return this.spreadsheetId;
     const q = encodeURIComponent(`name = '${ConfigService.FILENAME}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`);
-    const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}`, {
+    // apiFetch ya lanza Error("401") en respuestas 401
+    const response = await apiFetch(`https://www.googleapis.com/drive/v3/files?q=${q}`, {
       headers: { Authorization: `Bearer ${this.accessToken}` }
     });
-    if (response.status === 401) throw new Error("401");
     const data = await response.json();
     const fileId = data.files?.[0]?.id;
     if (!fileId) throw new Error("NOT_FOUND");
@@ -53,7 +54,7 @@ export class ConfigService {
           { properties: { title: 'Mapping_Cache' } }
         ]
       };
-      const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+      const response = await apiFetch('https://sheets.googleapis.com/v4/spreadsheets', {
         method: 'POST',
         headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(spreadsheet)
@@ -62,7 +63,7 @@ export class ConfigService {
       id = String(data.spreadsheetId || '');
       this.spreadsheetId = id;
 
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchUpdate`, {
+      await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchUpdate`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -93,8 +94,7 @@ export class ConfigService {
    */
   private async runMigrations(spreadsheetId: string): Promise<void> {
     try {
-      // Check existing sheet names
-      const metaResponse = await fetch(
+      const metaResponse = await apiFetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`,
         { headers: { Authorization: `Bearer ${this.accessToken}` } }
       );
@@ -103,7 +103,7 @@ export class ConfigService {
 
       // Migration 1: Create Categories sheet
       if (!sheetTitles.includes('Categories')) {
-        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -111,7 +111,7 @@ export class ConfigService {
           })
         });
 
-        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+        await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -125,13 +125,13 @@ export class ConfigService {
       }
 
       // Migration 2: Add "Producto Normalizado" header to Gastos!J1
-      const headerResponse = await fetch(
+      const headerResponse = await apiFetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!J1`,
         { headers: { Authorization: `Bearer ${this.accessToken}` } }
       );
       const headerData = await headerResponse.json();
       if (!headerData.values || !headerData.values[0]?.[0]) {
-        await fetch(
+        await apiFetch(
           `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!J1?valueInputOption=RAW`,
           {
             method: 'PUT',
@@ -148,7 +148,7 @@ export class ConfigService {
 
   async getSettings(forcedId?: string): Promise<OmniSettings> {
     const id = forcedId || await this.getOrFindId();
-    const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Settings!A1:B5`, {
+    const response = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Settings!A1:B5`, {
       headers: { Authorization: `Bearer ${this.accessToken}` }
     });
     const data = await response.json();
@@ -168,7 +168,6 @@ export class ConfigService {
 
   async updateSetting(key: 'GEMINI_API_KEY' | 'GMAIL_SEARCH_LABEL' | 'GMAIL_PROCESSED_LABEL', value: string): Promise<void> {
     const id = await this.getOrFindId();
-    // Find the row number for this key
     const rowMap: Record<string, number> = {
       GMAIL_SEARCH_LABEL: 1,
       GMAIL_PROCESSED_LABEL: 2,
@@ -176,11 +175,14 @@ export class ConfigService {
     };
     const row = rowMap[key];
     if (!row) return;
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Settings!B${row}?valueInputOption=RAW`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [[String(value).trim()]] })
-    });
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Settings!B${row}?valueInputOption=RAW`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [[String(value).trim()]] })
+      }
+    );
   }
 
   async updateGeminiKey(key: string): Promise<void> {
@@ -190,10 +192,13 @@ export class ConfigService {
   async updateLastSync(): Promise<void> {
     const id = await this.getOrFindId();
     const now = new Date().toLocaleString();
-    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Settings!B4?valueInputOption=RAW`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [[String(now)]] })
-    });
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Settings!B4?valueInputOption=RAW`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [[String(now)]] })
+      }
+    );
   }
 }

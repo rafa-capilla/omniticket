@@ -4,56 +4,82 @@
 
 ### Cliente OAuth
 - **CLIENT_ID**: `493268705547-fnbs5b5op3e9km8mptiimck61opiuot8.apps.googleusercontent.com`
-- **Ubicación**: Hardcoded en `App.tsx:10`
-- **Tipo**: Client-side OAuth (Implicit Flow)
-- **Librería**: Google Identity Services (gsi client)
+- **Ubicación**: Hardcoded en `App.tsx` (constante `CLIENT_ID`)
+- **Tipo**: Client-side OAuth (Implicit Flow / Token flow)
+- **Librería**: Google Identity Services (GSI client, cargada via script tag en `index.html`)
 
 ### Scopes Requeridos
 ```
-https://www.googleapis.com/auth/gmail.readonly
-https://www.googleapis.com/auth/gmail.labels
 https://www.googleapis.com/auth/gmail.modify
 https://www.googleapis.com/auth/spreadsheets
 https://www.googleapis.com/auth/drive.file
 ```
 
 #### Detalle de Scopes
-1. **gmail.readonly**: Leer contenido de emails
-2. **gmail.labels**: Crear/modificar labels
-3. **gmail.modify**: Añadir labels a threads
-4. **spreadsheets**: Crear/editar spreadsheets
-5. **drive.file**: Crear archivos en Drive (solo los creados por la app)
+1. **gmail.modify**: Leer contenido de emails Y añadir labels a threads (cubre gmail.readonly + gmail.labels)
+2. **spreadsheets**: Crear y editar spreadsheets (leer y escribir)
+3. **drive.file**: Buscar y crear archivos en Drive (solo los creados por la app)
 
 ### Flujo de Autenticación
 1. Usuario hace clic en "Conectar Google Account"
-2. Se abre popup de Google OAuth
+2. Se abre popup de Google OAuth (`prompt: 'consent'`)
 3. Usuario autoriza los scopes
-4. Google devuelve access token (JWT)
-5. Token se guarda en memoria (no persistente)
-6. Token se usa en headers: `Authorization: Bearer {token}`
+4. Google devuelve access token
+5. Token se guarda en `localStorage.google_access_token`
+6. Timestamp de expiración se guarda en `localStorage.google_token_expires_at` (ahora + 1 hora)
+7. Token se usa en headers: `Authorization: Bearer {token}`
 
 ### Manejo de Sesión
-- **Duración**: Token expira según política de Google (típicamente 1 hora)
-- **Renovación**: No implementada - usuario debe volver a login
-- **Logout**: Revoca token y limpia estado local
-- **Error 401**: Dispara logout automático
+- **Duración**: Token expira en ~1 hora (política de Google)
+- **Renovación automática**: Intervalo cada 60s en `App.tsx` comprueba `isTokenExpiringSoon()`. Si quedan < 5 min, llama a `silentRefresh()` (sin UI)
+- **Renovación manual**: Botón "Reconectar" en el header llama a `GoogleAuthService.login()` sin hacer logout, renovando el token sin perder el estado de la app
+- **Logout**: Elimina token y expiresAt de localStorage. Vuelve a la pantalla de login
+- **Error 401**: `apiFetch()` lanza `Error("401")` → App.tsx muestra toast "Sesión expirada" y el usuario puede usar el botón "Reconectar"
+- **Sin re-bootstrap en refresh**: El ref `isBootstrapped` en App.tsx evita llamar a `ConfigService.ensureDatabase()` de nuevo cuando el token se renueva silenciosamente
+
+## apiFetch — Helper HTTP Centralizado
+
+Todos los servicios usan `apiFetch()` (en `services/apiFetch.ts`) en lugar de `fetch()` directamente.
+
+```text
+apiFetch(url, init?) → Promise<Response>
+```
+
+Comportamiento:
+- Llama a `fetch(url, init)`
+- Si `response.ok`: devuelve el Response
+- Si `response.status === 401`: lanza `Error("401")`
+- Si `response.status === 429`: lanza `Error("Rate limit alcanzado. Inténtalo de nuevo en unos segundos.")`
+- Otros errores: extrae `body.error.message` del JSON de Google y lo lanza como Error descriptivo
+
+## withRetry — Reintentos con Backoff Exponencial
+
+```text
+withRetry(fn, maxAttempts = 3) → Promise<T>
+```
+
+- Reintenta solo si el error contiene "429" o "Rate limit" en el mensaje
+- Esperas: 1s (intento 1→2), 2s (intento 2→3), 4s (intento 3→4)
+- Otros errores se propagan inmediatamente sin reintentar
+- Usado en: `SyncEngine.extractDataWithAI()` y `AIAnalysisService.analyze()`
 
 ## Gmail API
 
 ### Endpoints Usados
 ```
-GET https://gmail.googleapis.com/gmail/v1/users/me/threads?q={query}
-GET https://gmail.googleapis.com/gmail/v1/users/me/threads/{threadId}
+GET  https://gmail.googleapis.com/gmail/v1/users/me/threads?q={query}
+GET  https://gmail.googleapis.com/gmail/v1/users/me/threads/{threadId}?format=full
 POST https://gmail.googleapis.com/gmail/v1/users/me/threads/{threadId}/modify
+GET  https://gmail.googleapis.com/gmail/v1/users/me/labels
+POST https://gmail.googleapis.com/gmail/v1/users/me/labels
 ```
 
 ### Query de Búsqueda
 ```
-label:OmniTicket -label:OmniTicket/Procesado
+label:{GMAIL_SEARCH_LABEL} -label:{GMAIL_PROCESSED_LABEL}
 ```
-- Busca threads con label "OmniTicket"
-- Excluye threads ya procesados
 - Labels son configurables desde Settings
+- Default sugerido: `label:OmniTicket -label:OmniTicket/Procesado`
 
 ### Estructura de Thread
 ```text
@@ -63,10 +89,13 @@ label:OmniTicket -label:OmniTicket/Procesado
     {
       id: string,
       payload: {
-        parts: [ // Partes del email (HTML, texto, attachments)
+        mimeType: string,       // "multipart/mixed", "text/plain", "text/html", etc.
+        body: { data?: string }, // Base64url encoded (puede estar vacío en multipart)
+        parts?: [               // Sub-partes en emails multipart
           {
             mimeType: string,
-            body: { data: string } // Base64 encoded
+            body: { data?: string },
+            parts?: [...]       // Puede anidar indefinidamente
           }
         ]
       }
@@ -75,19 +104,20 @@ label:OmniTicket -label:OmniTicket/Procesado
 }
 ```
 
-### Extracción de Contenido
-- Se lee el primer mensaje del thread
-- Se busca parte con `text/html` o `text/plain`
-- Se decodifica de Base64
-- Se pasa raw a Gemini (no se sanitiza HTML)
+### Extracción de Contenido (GmailService)
+La función `extractTextFromPayload(payload)` es **recursiva**:
+1. Si `payload.body.data` existe → decodifica Base64url (con try/catch para padding incorrecto)
+2. Si no, busca sub-parte con `mimeType === 'text/plain'` y recursa
+3. Si no hay text/plain, busca `mimeType === 'text/html'` y recursa
+4. Si no hay ninguno, recursa por todas las partes restantes hasta encontrar texto
+5. `getThreadContent()` itera **todos los mensajes del thread** y concatena el texto extraído de cada uno
 
 ### Añadir Label
 ```text
 POST /threads/{threadId}/modify
-{
-  "addLabelIds": ["Label_123"]
-}
+{ "addLabelIds": ["Label_123"] }
 ```
+Si el label no existe, se crea primero con `POST /labels { "name": "OmniTicket/Procesado" }`.
 
 ## Google Sheets API
 
@@ -95,52 +125,61 @@ POST /threads/{threadId}/modify
 ```
 POST https://sheets.googleapis.com/v4/spreadsheets
 GET  https://sheets.googleapis.com/v4/spreadsheets/{id}/values/{range}
-POST https://sheets.googleapis.com/v4/spreadsheets/{id}/values:append
-POST https://sheets.googleapis.com/v4/spreadsheets/{id}/values:batchUpdate
+POST https://sheets.googleapis.com/v4/spreadsheets/{id}/values/{range}:append
 PUT  https://sheets.googleapis.com/v4/spreadsheets/{id}/values/{range}
+POST https://sheets.googleapis.com/v4/spreadsheets/{id}/values:batchUpdate
+POST https://sheets.googleapis.com/v4/spreadsheets/{id}:batchUpdate  (para añadir hojas)
 ```
 
-### Creación de Spreadsheet
+### Creación del Spreadsheet (5 hojas)
 ```text
 {
   "properties": { "title": "OmniTicket_DB" },
   "sheets": [
-    { "properties": { "title": "Settings" } },
+    { "properties": { "title": "Config" } },
     { "properties": { "title": "Gastos", "gridProperties": { "frozenRowCount": 1 } } },
+    { "properties": { "title": "Historial", "gridProperties": { "frozenRowCount": 1 } } },
     { "properties": { "title": "Rules", "gridProperties": { "frozenRowCount": 1 } } },
-    { "properties": { "title": "Mapping_Cache" } }
+    { "properties": { "title": "Categorias", "gridProperties": { "frozenRowCount": 1 } } }
   ]
 }
 ```
 
 ### Estructura de Hojas
 
-#### Settings (A1:B5)
+#### Config (A1:B)
 | Clave | Valor |
 |-------|-------|
 | GMAIL_SEARCH_LABEL | "OmniTicket" |
 | GMAIL_PROCESSED_LABEL | "OmniTicket/Procesado" |
 | GEMINI_API_KEY | "" |
-| LAST_SYNC | "Nunca" |
 
-#### Gastos (A1:I1 header + datos)
-| ID Ticket | Tienda | Fecha | Producto | Categoría | Cantidad | P. Unitario | Descuento | Total Línea |
-|-----------|--------|-------|----------|-----------|----------|-------------|-----------|-------------|
+#### Gastos (A1:J1 header + datos) — 10 columnas
+| ID Ticket | Tienda | Fecha | Producto | Categoría | P. Unitario | Cantidad | Unidad | Total Línea | Nombre Normalizado |
+|-----------|--------|-------|----------|-----------|-------------|----------|--------|-------------|-------------------|
+| Col A | Col B | Col C | Col D | Col E | Col F | Col G | Col H | Col I | Col J |
+
+> La última columna (J) contiene el nombre normalizado por Gemini. Se usa en las lentes de análisis.
+
+#### Historial (A1:... header + datos)
+Resumen de tickets: id, fecha, tienda, total, estado
 
 #### Rules (A1:C1 header + datos)
-| Original_Pattern | Normalized_Name | Category |
-|------------------|-----------------|----------|
+| pattern | normalized | category |
+|---------|-----------|----------|
 
-#### Mapping_Cache (columnas implícitas)
-| original | simplificado |
-|----------|--------------|
+#### Categorias (A1:C1 header + datos)
+| name | description | status |
+|------|-------------|--------|
 
-### Formato de Append
+### Formato de Append para Gastos
 ```text
+POST /spreadsheets/{id}/values/Gastos!A:J:append
 {
-  "range": "Gastos!A:I",
+  "range": "Gastos!A:J",
   "values": [
-    ["uuid-123", "Mercadona", "2025-01-15", "Coca Cola Zero 2L", "Bebidas", 2, 1.50, 0.10, 2.90]
+    ["uuid-123", "Mercadona", "2025-01-15", "COCA COLA ZERO 2L PET", "Bebidas", 1.50, 2, "", 2.90, "Coca Cola Zero 2L"],
+    ["uuid-123", "Mercadona", "2025-01-15", "--- TOTAL TICKET ---", "", "", "", "", 2.90, ""]
   ]
 }
 ```
@@ -154,49 +193,30 @@ GET https://www.googleapis.com/drive/v3/files?q={query}
 
 ### Query de Búsqueda de Spreadsheet
 ```
-name = 'OmniTicket_DB' and
-mimeType = 'application/vnd.google-apps.spreadsheet' and
-trashed = false
-```
-
-### Respuesta
-```text
-{
-  "files": [
-    {
-      "id": "1abc...",
-      "name": "OmniTicket_DB",
-      "mimeType": "application/vnd.google-apps.spreadsheet"
-    }
-  ]
-}
+name = 'OmniTicket_DB' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false
 ```
 
 ## Gemini AI API
 
 ### Configuración
 - **Librería**: `@google/genai` v1.41.0
-- **Modelo**: `gemini-2.5-pro` (versión preview)
-- **API Key**: Almacenada en spreadsheet del usuario (Settings!B3)
-- **Inicialización**: `new GoogleGenAI({ apiKey: process.env.API_KEY })`
-
-⚠️ **NOTA**: `process.env.API_KEY` debe estar definido en el entorno. Actualmente usa variable de entorno, pero debería leer de spreadsheet.
+- **Modelo**: `gemini-2.5-pro`
+- **API Key**: Se lee en tiempo de ejecución del spreadsheet (`settings.GEMINI_API_KEY` via `ConfigService.getSettings()`). **No se usan variables de entorno.**
+- **Inicialización**: `new GoogleGenAI({ apiKey: settings.GEMINI_API_KEY })`
 
 ### Endpoint
 ```
 POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent
 ```
 
-### Extracción de Tickets
+### Extracción de Tickets (SyncEngine)
+Gemini recibe el contenido raw del email y devuelve JSON estructurado.
+Extrae Y normaliza los nombres de productos en una sola llamada.
+
 ```text
-{
-  model: "gemini-2.5-pro",
-  contents: "Analiza el contenido...",
-  config: {
-    systemInstruction: "Eres un asistente experto...",
-    responseMimeType: "application/json",
-    responseSchema: { /* JSON Schema */ }
-  }
+config: {
+  responseMimeType: "application/json",
+  responseSchema: { /* JSON Schema con tienda, fecha, items[], total_ticket */ }
 }
 ```
 
@@ -205,7 +225,6 @@ POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:gene
 {
   type: Type.OBJECT,
   properties: {
-    id: { type: Type.STRING },
     tienda: { type: Type.STRING },
     fecha: { type: Type.STRING },
     items: {
@@ -213,7 +232,7 @@ POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:gene
       items: {
         type: Type.OBJECT,
         properties: {
-          nombre: { type: Type.STRING },
+          nombre: { type: Type.STRING },         // Nombre YA normalizado
           categoria: { type: Type.STRING },
           precio_unitario: { type: Type.NUMBER },
           cantidad: { type: Type.NUMBER },
@@ -227,94 +246,84 @@ POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:gene
 }
 ```
 
-### Normalización de Productos
+### Análisis Libre (AIAnalysisService)
+Recibe datos agregados + pregunta del usuario. Devuelve análisis en texto + datos para gráfico.
+
 ```text
 {
   model: "gemini-2.5-pro",
-  contents: "Normaliza estos productos...",
+  contents: "...",  // datos agregados + prompt del usuario
   config: {
     responseMimeType: "application/json",
     responseSchema: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          original: { type: Type.STRING },
-          simplificado: { type: Type.STRING }
-        }
+      type: Type.OBJECT,
+      properties: {
+        analysis_text: { type: Type.STRING },
+        chart_type: { type: Type.STRING },   // "pie" | "bar"
+        chart_title: { type: Type.STRING },
+        chart_data: { type: Type.ARRAY, items: { ... } }
       }
     }
   }
 }
 ```
 
-### Límites y Consideraciones
-- **Batch size**: Máximo 30 productos por llamada (configurado en código)
-- **Rate limiting**: No implementado (puede fallar con muchos productos)
-- **Costo**: Se carga a la cuenta Gemini del usuario (API key propia)
-- **Fallback**: No hay - si Gemini falla, el proceso se detiene
-
-## Variables de Entorno
-
-### .env.local (local development)
-```bash
-API_KEY=tu_gemini_api_key_aqui
-```
-
-⚠️ **PROBLEMA ACTUAL**: La app usa `process.env.API_KEY` pero debería leer desde el spreadsheet (`settings.GEMINI_API_KEY`)
-
-### Vite Environment Variables
-- Vite solo expone variables con prefijo `VITE_`
-- Variables sin prefijo NO están disponibles en el navegador
-- `process.env.API_KEY` solo funciona en build de servidor (no en cliente)
-
-### Solución Recomendada
-Cambiar en `SyncEngine.ts` y `NormalizationService.ts`:
-```text
-// Actual (INCORRECTO para client-side)
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-// Debería ser
-const ai = new GoogleGenAI({ apiKey: this.config.getSettings().GEMINI_API_KEY });
-```
+### Rate Limiting
+- **Implementado**: `withRetry()` en `services/retry.ts` reintenta automáticamente en errores 429
+- Backoff exponencial: 1s → 2s → 4s (máximo 3 intentos)
+- Afecta a: `SyncEngine.extractDataWithAI()` y `AIAnalysisService.analyze()`
 
 ## Seguridad
 
 ### Almacenamiento de Secretos
-- ✅ **OAuth Token**: Solo en memoria, no persiste
-- ⚠️ **Gemini API Key**: En spreadsheet del usuario (visible si tiene acceso al sheet)
-- ❌ **CLIENT_ID**: Hardcoded en código fuente (público)
+- ✅ **Gemini API Key**: En spreadsheet del usuario (no en código ni servidor)
+- ⚠️ **OAuth Token**: En `localStorage` con timestamp de expiración (necesario para persistir sesión entre recargas)
+- ⚠️ **CLIENT_ID**: Hardcoded en código fuente — normal para OAuth client-side, pero limitar dominio autorizado en Google Cloud Console
+
+### Content-Security-Policy
+`index.html` incluye meta tag CSP que restringe:
+- `script-src`: solo `'self'` y `accounts.google.com` (no `unsafe-inline`)
+- `connect-src`: Gmail, Sheets, Drive, Gemini y accounts.google.com
+- `frame-src`: solo `accounts.google.com`
 
 ### Riesgos
-1. **CLIENT_ID expuesto**: Normal para OAuth client-side, pero limitar dominio autorizado
-2. **API Key en Sheet**: Usuario podría compartir sheet y exponer su API key
-3. **Sin backend**: No hay forma de rate-limiting o monitoreo de abuso
+1. **CLIENT_ID expuesto**: Normal para OAuth client-side; mitigar limitando dominios autorizados en Google Cloud Console
+2. **API Key en Sheet**: Si el usuario comparte el spreadsheet, expone su API key de Gemini
+3. **Token en localStorage**: Persiste entre recargas (mejora UX) pero accessible desde JS. Mitigado por CSP y TLS
 
 ### Mejores Prácticas
 - No compartir el spreadsheet "OmniTicket_DB"
 - Regenerar API Key de Gemini periódicamente
 - Configurar dominio autorizado en Google Cloud Console para el CLIENT_ID
-- Considerar backend proxy para Gemini API (ocultar API key)
 
-## Testing y Debug
+## Errores Comunes
 
-### Headers Comunes
-```text
-{
-  "Authorization": "Bearer {access_token}",
-  "Content-Type": "application/json"
-}
+| Código | Causa | Comportamiento actual |
+|--------|-------|----------------------|
+| 401 | Token expirado | Toast "Sesión expirada" + botón "Reconectar" en header |
+| 403 | Falta scope | Error descriptivo via apiFetch |
+| 404 | Spreadsheet no encontrado | `ensureDatabase()` lo crea automáticamente |
+| 429 | Rate limit Gemini | `withRetry()` reintenta con backoff automáticamente |
+
+## Build y Desarrollo
+
+### Tailwind CSS
+- **Modo**: Build-time PostCSS (NO CDN)
+- **Config**: `tailwind.config.js` (content paths, keyframe `animate-fade-in`)
+- **PostCSS**: `postcss.config.js` con plugins `tailwindcss` y `autoprefixer`
+- **Entry CSS**: `index.css` con `@tailwind` directives + `.custom-scrollbar` utility
+
+### Build Local
+```bash
+# SIEMPRE usar Docker (el volumen .:/app pisa node_modules del contenedor)
+docker compose run --rm omniticket sh -c "npm ci && npm run build"
+
+# Dev server
+docker compose up  # expone :5173
 ```
 
-### Errores Comunes
-| Código | Causa | Solución |
-|--------|-------|----------|
-| 401 | Token expirado | Hacer logout y volver a login |
-| 403 | Falta scope | Revisar scopes en OAuth consent |
-| 404 | Spreadsheet no encontrado | Ejecutar `ensureDatabase()` |
-| 429 | Rate limit | Esperar o implementar retry con backoff |
-
 ### Logging
-- `console.error()` en todos los servicios
+- `console.error()` en bloques catch de los servicios
+- Errores al usuario via sistema de toasts (`toast.error()`)
+- Progreso de sync via `setProgressMsg()` → indicador flotante en pantalla
 - No hay telemetría ni analytics
-- Errores se muestran como alerts al usuario
