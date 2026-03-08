@@ -1,6 +1,10 @@
 import { OmniSettings } from '../types';
 import { apiFetch } from './apiFetch';
 
+interface SheetMetadata {
+  properties?: { title?: string };
+}
+
 const DEFAULT_CATEGORIES = [
   ['Lácteos', 'Leche, yogures, quesos, mantequilla, nata', 'active'],
   ['Carne', 'Carne roja, pollo, pescado, embutidos', 'active'],
@@ -42,8 +46,8 @@ export class ConfigService {
     let id: string;
     try {
       id = await this.getOrFindId();
-    } catch (e: any) {
-      if (e.message === "401") throw e;
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message === "401") throw e;
 
       const spreadsheet = {
         properties: { title: ConfigService.FILENAME },
@@ -99,7 +103,7 @@ export class ConfigService {
         { headers: { Authorization: `Bearer ${this.accessToken}` } }
       );
       const meta = await metaResponse.json();
-      const sheetTitles: string[] = (meta.sheets || []).map((s: any) => String(s.properties?.title || ''));
+      const sheetTitles: string[] = (meta.sheets || []).map((s: SheetMetadata) => String(s.properties?.title || ''));
 
       // Migration 1: Create Categories sheet
       if (!sheetTitles.includes('Categories')) {
@@ -155,9 +159,9 @@ export class ConfigService {
     const rows = data.values || [];
     const settings: OmniSettings = { GMAIL_SEARCH_LABEL: 'OmniTicket', GMAIL_PROCESSED_LABEL: 'OmniTicket/Procesado', GEMINI_API_KEY: '', LAST_SYNC: 'Nunca' };
 
-    rows.forEach((row: any[]) => {
-      const key = String(row[0] || '').trim();
-      const val = String(row[1] || '').trim();
+    rows.forEach((row: string[]) => {
+      const key = (row[0] ?? '').trim();
+      const val = (row[1] ?? '').trim();
       if (key === 'GMAIL_SEARCH_LABEL') settings.GMAIL_SEARCH_LABEL = val;
       if (key === 'GMAIL_PROCESSED_LABEL') settings.GMAIL_PROCESSED_LABEL = val;
       if (key === 'GEMINI_API_KEY') settings.GEMINI_API_KEY = val;
