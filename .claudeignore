@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-package-lock.json
 
 # Build outputs
 dist/
@@ -21,19 +20,8 @@ dist-ssr/
 .aider*
 *.local
 
-# Docker
-dockerfile
-docker-compose.yml
-.dockerignore
-
-# Test files (when added)
-**/*.test.ts
-**/*.test.tsx
-**/*.spec.ts
-**/*.spec.tsx
+# Claude Code local settings
+.claude/
 
 # Documentation that Claude already knows
 README.md
-
-# GitHub workflows (not relevant for coding tasks)
-.github/
