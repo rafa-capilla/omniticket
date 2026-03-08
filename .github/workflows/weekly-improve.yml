@@ -1,0 +1,421 @@
+name: Weekly Auto-Improve
+
+on:
+  schedule:
+    - cron: '0 13 * * 0'
+  workflow_dispatch:
+    inputs:
+      focus:
+        description: 'Specific focus for this run (leave empty for open weekly improvement)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.decide.outputs.run }}
+      focused: ${{ steps.decide.outputs.focused }}
+      focus: ${{ steps.decide.outputs.focus }}
+      week: ${{ steps.decide.outputs.week }}
+    steps:
+      - name: Skip cron if an auto-improve PR is already open
+        id: decide
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FOCUS="${{ github.event.inputs.focus }}"
+          echo "week=$(date +%V)" >> $GITHUB_OUTPUT
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=true" >> $GITHUB_OUTPUT
+            if [ -n "$FOCUS" ]; then
+              echo "focused=true" >> $GITHUB_OUTPUT
+              echo "focus=$FOCUS" >> $GITHUB_OUTPUT
+            else
+              echo "focused=false" >> $GITHUB_OUTPUT
+              echo "focus=" >> $GITHUB_OUTPUT
+            fi
+            exit 0
+          fi
+
+          echo "focused=false" >> $GITHUB_OUTPUT
+          echo "focus=" >> $GITHUB_OUTPUT
+
+          OPEN_PRS=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --label "auto-improve" \
+            --state open \
+            --json number \
+            --jq 'length')
+
+          if [ "$OPEN_PRS" -gt 0 ]; then
+            echo "run=false" >> $GITHUB_OUTPUT
+            echo "There are $OPEN_PRS open auto-improve PR(s), skipping cron run"
+          else
+            echo "run=true" >> $GITHUB_OUTPUT
+          fi
+
+  pass-1:
+    needs: check
+    if: needs.check.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      rate_limited: ${{ steps.run.outputs.rate_limited }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.claude/bin" >> $GITHUB_PATH
+
+      - name: Run pass 1
+        id: run
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          FOCUSED="${{ needs.check.outputs.focused }}"
+          FOCUS="${{ needs.check.outputs.focus }}"
+
+          RULES="RULES:
+          - Zero observable behaviour changes
+          - Do not rename public functions/classes/methods
+          - Do not change function signatures
+          - Do not delete code without verifying it is unreferenced
+          - If there is nothing clear to improve, do not force changes
+
+          When done, generate a Markdown summary of the changes:
+          - File modified
+          - What was changed and why"
+
+          if [ "$FOCUSED" = "true" ]; then
+            PROMPT="Read CLAUDE.md before making any changes.
+
+          Your FOCUS for this run: $FOCUS. Analyse the repository and implement the improvements that best achieve this focus. No limit on the number of files you can modify.
+
+          $RULES"
+          else
+            PROMPT="Read CLAUDE.md before making any changes.
+
+          Analyse the full repository. Identify and execute the highest-value improvements you can find.
+          You can touch any area: TypeScript types, business logic, performance, tests, documentation,
+          processing rules, component architecture, security — whatever you judge most valuable.
+          No limit on the number of files you can modify.
+
+          $RULES"
+          fi
+
+          claude -p "$PROMPT" \
+          --dangerously-skip-permissions \
+          --max-turns 80 \
+          --output-format json > /tmp/claude-output.json 2>&1 || true
+
+          IS_ERROR=$(jq -r '.is_error // false' /tmp/claude-output.json 2>/dev/null)
+          RESULT=$(jq -r '.result // ""' /tmp/claude-output.json 2>/dev/null)
+
+          if [ "$IS_ERROR" = "true" ] || echo "$RESULT" | grep -qi "rate limit\|429\|too many requests"; then
+            echo "rate_limited=true" >> $GITHUB_OUTPUT
+            echo "::warning::Pass 1 hit rate limit — pass 2 and 3 will be skipped"
+          else
+            echo "rate_limited=false" >> $GITHUB_OUTPUT
+          fi
+
+          SUMMARY=$(echo "$RESULT" | head -200)
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Save diff artifact
+        if: steps.run.outputs.rate_limited != 'true'
+        run: git diff > /tmp/pass1.diff
+
+      - uses: actions/upload-artifact@v4
+        if: steps.run.outputs.rate_limited != 'true'
+        with:
+          name: diff-pass1
+          path: /tmp/pass1.diff
+          retention-days: 1
+
+      - name: Check TypeScript
+        id: tsc
+        if: steps.run.outputs.rate_limited != 'true'
+        run: docker compose run --rm omniticket sh -c "npm ci && npx tsc --noEmit"
+        continue-on-error: true
+
+      - name: Set PR title for pass 1
+        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'success'
+        id: pr_title
+        run: |
+          WEEK="${{ needs.check.outputs.week }}"
+          if [ "${{ needs.check.outputs.focused }}" = "true" ]; then
+            echo "title=🤖 Auto-improve: ${{ needs.check.outputs.focus }} (Week $WEEK)" >> $GITHUB_OUTPUT
+          else
+            echo "title=🤖 Auto-improve pass 1 — Week $WEEK" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'success'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: auto-improve-w${{ needs.check.outputs.week }}-pass1-${{ github.run_number }}
+          title: ${{ steps.pr_title.outputs.title }}
+          body: |
+            ## Automatic improvements — pass 1 · Week ${{ needs.check.outputs.week }}
+
+            ### Summary of changes
+            ${{ steps.run.outputs.summary }}
+
+            ---
+            ⚠️ **Review before merging.**
+          commit-message: |
+            🤖 auto-improve: week ${{ needs.check.outputs.week }}, pass 1
+
+            ${{ steps.run.outputs.summary }}
+          labels: "auto-improve,needs-review"
+
+      - name: Revert if TypeScript failed
+        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'failure'
+        run: |
+          git checkout .
+          git clean -fd
+          echo "::warning::Pass 1 — TypeScript check failed. No PR was created."
+
+  pass-2:
+    needs: [check, pass-1]
+    if: |
+      needs.check.outputs.should_run == 'true' &&
+      needs.check.outputs.focused != 'true' &&
+      needs.pass-1.outputs.rate_limited != 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      rate_limited: ${{ steps.run.outputs.rate_limited }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: diff-pass1
+          path: /tmp
+
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.claude/bin" >> $GITHUB_PATH
+
+      - name: Run pass 2
+        id: run
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          PREV_DIFF=$(cat /tmp/pass1.diff 2>/dev/null || echo "(no diff)")
+
+          claude -p "
+          Read CLAUDE.md before making any changes.
+
+          The previous pass already made these changes (git diff):
+          ---
+          $PREV_DIFF
+          ---
+
+          Find the next highest-value improvements in areas not already modified by the previous pass.
+          You can touch any area: TypeScript types, business logic, performance, tests, documentation,
+          processing rules, component architecture, security — whatever you judge most valuable.
+          No limit on the number of files you can modify.
+
+          RULES:
+          - Zero observable behaviour changes
+          - Do not rename public functions/classes/methods
+          - Do not change function signatures
+          - Do not delete code without verifying it is unreferenced
+          - If there is nothing clear to improve, do not force changes
+
+          When done, generate a Markdown summary of the changes:
+          - File modified
+          - What was changed and why
+          " \
+          --dangerously-skip-permissions \
+          --max-turns 60 \
+          --output-format json > /tmp/claude-output.json 2>&1 || true
+
+          IS_ERROR=$(jq -r '.is_error // false' /tmp/claude-output.json 2>/dev/null)
+          RESULT=$(jq -r '.result // ""' /tmp/claude-output.json 2>/dev/null)
+
+          if [ "$IS_ERROR" = "true" ] || echo "$RESULT" | grep -qi "rate limit\|429\|too many requests"; then
+            echo "rate_limited=true" >> $GITHUB_OUTPUT
+            echo "::warning::Pass 2 hit rate limit — pass 3 will be skipped"
+          else
+            echo "rate_limited=false" >> $GITHUB_OUTPUT
+          fi
+
+          SUMMARY=$(echo "$RESULT" | head -200)
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Save diff artifact
+        if: steps.run.outputs.rate_limited != 'true'
+        run: git diff > /tmp/pass2.diff
+
+      - uses: actions/upload-artifact@v4
+        if: steps.run.outputs.rate_limited != 'true'
+        with:
+          name: diff-pass2
+          path: /tmp/pass2.diff
+          retention-days: 1
+
+      - name: Check TypeScript
+        id: tsc
+        if: steps.run.outputs.rate_limited != 'true'
+        run: docker compose run --rm omniticket sh -c "npm ci && npx tsc --noEmit"
+        continue-on-error: true
+
+      - name: Create Pull Request
+        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'success'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: auto-improve-w${{ needs.check.outputs.week }}-pass2-${{ github.run_number }}
+          title: "🤖 Auto-improve pass 2 — Week ${{ needs.check.outputs.week }}"
+          body: |
+            ## Automatic improvements — pass 2 · Week ${{ needs.check.outputs.week }}
+
+            ### Summary of changes
+            ${{ steps.run.outputs.summary }}
+
+            ---
+            ⚠️ **Review before merging.**
+          commit-message: |
+            🤖 auto-improve: week ${{ needs.check.outputs.week }}, pass 2
+
+            ${{ steps.run.outputs.summary }}
+          labels: "auto-improve,needs-review"
+
+      - name: Revert if TypeScript failed
+        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'failure'
+        run: |
+          git checkout .
+          git clean -fd
+          echo "::warning::Pass 2 — TypeScript check failed. No PR was created."
+
+  pass-3:
+    needs: [check, pass-1, pass-2]
+    if: |
+      needs.check.outputs.should_run == 'true' &&
+      needs.check.outputs.focused != 'true' &&
+      needs.pass-1.outputs.rate_limited != 'true' &&
+      needs.pass-2.outputs.rate_limited != 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: diff-pass1
+          path: /tmp
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: diff-pass2
+          path: /tmp
+
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.claude/bin" >> $GITHUB_PATH
+
+      - name: Run pass 3
+        id: run
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          PREV_DIFF=$(cat /tmp/pass1.diff /tmp/pass2.diff 2>/dev/null || echo "(no diff)")
+
+          claude -p "
+          Read CLAUDE.md before making any changes.
+
+          The previous passes already made these changes (combined git diff):
+          ---
+          $PREV_DIFF
+          ---
+
+          Find the next highest-value improvements in areas not already modified by the previous passes.
+          You can touch any area: TypeScript types, business logic, performance, tests, documentation,
+          processing rules, component architecture, security — whatever you judge most valuable.
+          No limit on the number of files you can modify.
+
+          RULES:
+          - Zero observable behaviour changes
+          - Do not rename public functions/classes/methods
+          - Do not change function signatures
+          - Do not delete code without verifying it is unreferenced
+          - If there is nothing clear to improve, do not force changes
+
+          When done, generate a Markdown summary of the changes:
+          - File modified
+          - What was changed and why
+          " \
+          --dangerously-skip-permissions \
+          --max-turns 40 \
+          --output-format json > /tmp/claude-output.json 2>&1 || true
+
+          IS_ERROR=$(jq -r '.is_error // false' /tmp/claude-output.json 2>/dev/null)
+          RESULT=$(jq -r '.result // ""' /tmp/claude-output.json 2>/dev/null)
+
+          if [ "$IS_ERROR" = "true" ] || echo "$RESULT" | grep -qi "rate limit\|429\|too many requests"; then
+            echo "::warning::Pass 3 hit rate limit — no PR created for this pass"
+            exit 0
+          fi
+
+          SUMMARY=$(echo "$RESULT" | head -200)
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Check TypeScript
+        id: tsc
+        run: docker compose run --rm omniticket sh -c "npm ci && npx tsc --noEmit"
+        continue-on-error: true
+
+      - name: Create Pull Request
+        if: steps.tsc.outcome == 'success'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: auto-improve-w${{ needs.check.outputs.week }}-pass3-${{ github.run_number }}
+          title: "🤖 Auto-improve pass 3 — Week ${{ needs.check.outputs.week }}"
+          body: |
+            ## Automatic improvements — pass 3 · Week ${{ needs.check.outputs.week }}
+
+            ### Summary of changes
+            ${{ steps.run.outputs.summary }}
+
+            ---
+            ⚠️ **Review before merging.**
+          commit-message: |
+            🤖 auto-improve: week ${{ needs.check.outputs.week }}, pass 3
+
+            ${{ steps.run.outputs.summary }}
+          labels: "auto-improve,needs-review"
+
+      - name: Revert if TypeScript failed
+        if: steps.tsc.outcome == 'failure'
+        run: |
+          git checkout .
+          git clean -fd
+          echo "::warning::Pass 3 — TypeScript check failed. No PR was created."
