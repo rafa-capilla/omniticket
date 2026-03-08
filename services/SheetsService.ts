@@ -66,7 +66,7 @@ export class SheetsService {
   async getCategories(spreadsheetId: string): Promise<Category[]> {
     try {
       const response = await apiFetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Categories!A2:C100`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Categories!A2:C1000`,
         { headers: { Authorization: `Bearer ${this.accessToken}` } }
       );
       const data = await response.json();
