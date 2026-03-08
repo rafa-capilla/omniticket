@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Category } from '../types';
 import { SheetsService } from '../services/SheetsService';
 import { useApp } from '../contexts/AppContext';
@@ -28,8 +28,8 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
   const [deleteModal, setDeleteModal] = useState<{ index: number; name: string; replacement: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const activeCategories = categories.filter(c => c.status === 'active');
-  const sheets = new SheetsService(token);
+  const activeCategories = useMemo(() => categories.filter(c => c.status === 'active'), [categories]);
+  const sheets = useMemo(() => new SheetsService(token), [token]);
 
   const handleAdd = async () => {
     if (!newCat.name.trim()) return;

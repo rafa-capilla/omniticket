@@ -72,7 +72,7 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
     setIsAnalyzing(true);
     try {
       const config = new ConfigService(token);
-      const settings = await config.getSettings();
+      const settings = await config.getSettings(dbId);
       if (!settings.GEMINI_API_KEY) {
         toast.error('Configura tu GEMINI_API_KEY en la vista Settings primero.');
         return;

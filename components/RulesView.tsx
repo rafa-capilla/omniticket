@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Rule, Category } from '../types';
 import { SheetsService } from '../services/SheetsService';
 import { useApp } from '../contexts/AppContext';
@@ -12,17 +12,19 @@ interface Props {
 export const RulesView: React.FC<Props> = ({ rules, categories }) => {
   const { token, dbId, toast, loadData } = useApp();
 
-  const activeCategories = categories.filter(c => c.status === 'active');
-  const categoryOptions = activeCategories.length > 0
-    ? activeCategories.map(c => c.name)
-    : ['Lácteos', 'Carne', 'Fruta/Verdura', 'Limpieza', 'Bebidas', 'Higiene', 'Otros'];
+  const categoryOptions = useMemo(() => {
+    const active = categories.filter(c => c.status === 'active');
+    return active.length > 0
+      ? active.map(c => c.name)
+      : ['Lácteos', 'Carne', 'Fruta/Verdura', 'Limpieza', 'Bebidas', 'Higiene', 'Otros'];
+  }, [categories]);
 
   const defaultCategory = categoryOptions[0] ?? 'Otros';
   const [newRule, setNewRule] = useState<Rule>({ pattern: '', normalized: '', category: defaultCategory });
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Rule>({ pattern: '', normalized: '', category: defaultCategory });
 
-  const sheets = new SheetsService(token);
+  const sheets = useMemo(() => new SheetsService(token), [token]);
 
   const handleAdd = async () => {
     if (!newRule.pattern || !newRule.normalized) return;
