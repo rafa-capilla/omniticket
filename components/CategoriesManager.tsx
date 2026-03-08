@@ -78,13 +78,16 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
     setIsLoading(true);
     try {
       if (replacement) {
-        await sheets.updateCategoryInGastos(dbId, name, replacement);
-        const allRules = await sheets.getRules(dbId);
-        for (let i = 0; i < allRules.length; i++) {
-          if (allRules[i].category === name) {
-            await sheets.updateRule(dbId, i + 2, { ...allRules[i], category: replacement });
-          }
-        }
+        const [, allRules] = await Promise.all([
+          sheets.updateCategoryInGastos(dbId, name, replacement),
+          sheets.getRules(dbId),
+        ]);
+        const ruleUpdates = allRules.flatMap((rule, i) =>
+          rule.category === name
+            ? [sheets.updateRule(dbId, i + 2, { ...rule, category: replacement })]
+            : []
+        );
+        await Promise.all(ruleUpdates);
       }
       await sheets.deleteCategory(dbId, index + 2);
       setDeleteModal(null);
