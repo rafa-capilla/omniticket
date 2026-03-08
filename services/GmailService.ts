@@ -8,7 +8,8 @@ interface GmailThread {
 interface GmailLabel {
   id: string;
   name: string;
-  
+}
+
 interface GmailPayload {
   mimeType?: string;
   body?: { data?: string };
