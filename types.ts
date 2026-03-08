@@ -51,7 +51,7 @@ export interface Rule {
 export interface Category {
   name: string;
   description: string;
-  status: 'active' | 'archived';
+  status: 'active' | 'inactive';
 }
 
 export interface DashboardStats {

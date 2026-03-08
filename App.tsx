@@ -138,7 +138,7 @@ const App: React.FC = () => {
     if (appState === 'READY') loadData();
   }, [appState, loadData]);
 
-  const runSync = async () => {
+  const runSync = useCallback(async () => {
     if (!token) return;
     setIsSyncing(true);
     try {
@@ -156,7 +156,7 @@ const App: React.FC = () => {
       setIsSyncing(false);
       setProgressMsg('');
     }
-  };
+  }, [token, loadData, toast]);
 
   // Counts per category name — passed to CategoriesManager for delete confirmation
   const categoryCounts = useMemo(() => {

@@ -24,7 +24,10 @@ const LENS_LABELS: Record<LensType, string> = {
 export const LensesView: React.FC<Props> = ({
   currentLens, setCurrentLens, rawLines, dateRange, setDateRange, rules, categories,
 }) => {
-  const activeCategories = categories.filter(c => c.status === 'active');
+  const activeCategories = useMemo(
+    () => categories.filter(c => c.status === 'active'),
+    [categories]
+  );
 
   const processedData = useMemo(() => {
     return rawLines

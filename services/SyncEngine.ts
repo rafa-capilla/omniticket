@@ -84,7 +84,7 @@ export class SyncEngine {
     await this.config.updateLastSync();
 
     const succeeded = results.filter(r => r.status === 'success').length;
-    const failed = results.filter(r => r.status === 'error').length;
+    const failed = results.length - succeeded;
     if (failed === 0) {
       onProgress?.(`¡Sincronización completada! ${succeeded} ticket${succeeded !== 1 ? 's' : ''} procesado${succeeded !== 1 ? 's' : ''}.`);
     } else {

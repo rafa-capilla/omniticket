@@ -19,7 +19,7 @@ export class SheetsService {
     ];
     const values = [...itemRows, totalRow];
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A:J:append?valueInputOption=USER_ENTERED`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A:J:append?valueInputOption=RAW`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
@@ -73,7 +73,7 @@ export class SheetsService {
       return (data.values || []).map((row: string[]) => ({
         name: String(row[0] || ''),
         description: String(row[1] || ''),
-        status: (String(row[2] || 'active')) as 'active' | 'archived'
+        status: (String(row[2] || 'active')) as 'active' | 'inactive'
       })).filter((c: Category) => c.name);
     } catch {
       return [];
