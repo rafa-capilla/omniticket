@@ -1,12 +1,12 @@
-name: Weekly Auto-Improve
+name: Auto-Improve
 
 on:
   schedule:
-    - cron: '0 13 * * 0'
+    - cron: '0 13 * * *'
   workflow_dispatch:
     inputs:
       focus:
-        description: 'Specific focus for this run (leave empty for open weekly improvement)'
+        description: 'Specific focus for this run (leave empty for open improvement)'
         required: false
         default: ''
         type: string
@@ -22,7 +22,7 @@ jobs:
       should_run: ${{ steps.decide.outputs.run }}
       focused: ${{ steps.decide.outputs.focused }}
       focus: ${{ steps.decide.outputs.focus }}
-      week: ${{ steps.decide.outputs.week }}
+      day: ${{ steps.decide.outputs.day }}
     steps:
       - name: Skip cron if an auto-improve PR is already open
         id: decide
@@ -30,7 +30,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           FOCUS="${{ github.event.inputs.focus }}"
-          echo "week=$(date +%V)" >> $GITHUB_OUTPUT
+          echo "day=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "run=true" >> $GITHUB_OUTPUT
@@ -67,6 +67,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       rate_limited: ${{ steps.run.outputs.rate_limited }}
+      input_tokens: ${{ steps.run.outputs.input_tokens }}
+      output_tokens: ${{ steps.run.outputs.output_tokens }}
+      cache_read: ${{ steps.run.outputs.cache_read }}
 
     steps:
       - uses: actions/checkout@v4
@@ -86,8 +89,12 @@ jobs:
           FOCUSED="${{ needs.check.outputs.focused }}"
           FOCUS="${{ needs.check.outputs.focus }}"
 
-          RULES="RULES:
-          - Zero observable behaviour changes
+          if [ "$FOCUSED" = "true" ]; then
+            PROMPT="Read CLAUDE.md before making any changes.
+
+          Your FOCUS for this run: $FOCUS. Analyse the repository and implement the improvements that best achieve this focus. No limit on the number of files you can modify.
+
+          RULES:
           - Do not rename public functions/classes/methods
           - Do not change function signatures
           - Do not delete code without verifying it is unreferenced
@@ -96,27 +103,42 @@ jobs:
           When done, generate a Markdown summary of the changes:
           - File modified
           - What was changed and why"
-
-          if [ "$FOCUSED" = "true" ]; then
-            PROMPT="Read CLAUDE.md before making any changes.
-
-          Your FOCUS for this run: $FOCUS. Analyse the repository and implement the improvements that best achieve this focus. No limit on the number of files you can modify.
-
-          $RULES"
           else
             PROMPT="Read CLAUDE.md before making any changes.
 
-          Analyse the full repository. Identify and execute the highest-value improvements you can find.
-          You can touch any area: TypeScript types, business logic, performance, tests, documentation,
-          processing rules, component architecture, security — whatever you judge most valuable.
-          No limit on the number of files you can modify.
+          Act as a conservative senior engineer applying TDD, DDD, and Clean Code principles.
 
-          $RULES"
+          PRIMARY OBJECTIVE — Code quality (always):
+          Analyse the repository for the highest-value quality improvements:
+          - Improve TypeScript types (stricter types, remove \`any\`, better generics)
+          - Apply Clean Code principles (single responsibility, clear naming, reduce complexity)
+          - Apply DDD patterns where appropriate (value objects, clear domain boundaries)
+          - Add or improve unit/integration tests for untested critical paths
+          - Improve error handling, edge cases, and resilience
+          - Refactor for clarity and maintainability
+
+          SECONDARY OBJECTIVE — New ideas (only if code looks stable):
+          If you judge the code to be already clean and well-structured in the areas you've reviewed,
+          you MAY propose and implement ONE meaningful improvement such as:
+          - A new useful feature (e.g. export, filters, new view)
+          - A significant UX improvement
+          - A non-trivial performance optimisation
+
+          RULES:
+          - Prioritise quality over new features — do not add features to unstable/messy code
+          - Do not rename public functions/classes/methods
+          - Do not change function signatures
+          - Do not delete code without verifying it is unreferenced
+          - If there is nothing clear to improve, do not force changes
+
+          When done, generate a Markdown summary:
+          - File modified
+          - What was changed and why (quality fix or new idea)"
           fi
 
           claude -p "$PROMPT" \
           --dangerously-skip-permissions \
-          --max-turns 80 \
+          --max-turns 60 \
           --output-format json > /tmp/claude-output.json 2>&1 || true
 
           if ! jq empty /tmp/claude-output.json 2>/dev/null; then
@@ -129,6 +151,21 @@ jobs:
           IS_ERROR=$(jq -r '.is_error // false' /tmp/claude-output.json 2>/dev/null)
           RESULT=$(jq -r '.result // ""' /tmp/claude-output.json 2>/dev/null)
           RAW_OUTPUT=$(cat /tmp/claude-output.json 2>/dev/null)
+
+          INPUT_TOKENS=$(jq -r '.usage.input_tokens // 0' /tmp/claude-output.json)
+          OUTPUT_TOKENS=$(jq -r '.usage.output_tokens // 0' /tmp/claude-output.json)
+          CACHE_READ=$(jq -r '.usage.cache_read_input_tokens // 0' /tmp/claude-output.json)
+
+          echo "### Token usage — Pass 1" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Input tokens | $INPUT_TOKENS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Output tokens | $OUTPUT_TOKENS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cache read | $CACHE_READ |" >> $GITHUB_STEP_SUMMARY
+
+          echo "input_tokens=$INPUT_TOKENS" >> $GITHUB_OUTPUT
+          echo "output_tokens=$OUTPUT_TOKENS" >> $GITHUB_OUTPUT
+          echo "cache_read=$CACHE_READ" >> $GITHUB_OUTPUT
 
           IS_RATE_LIMITED=false
           if echo "$RESULT$RAW_OUTPUT" | grep -qi "rate limit\|429\|too many requests"; then
@@ -144,7 +181,7 @@ jobs:
 
           if [ "$IS_RATE_LIMITED" = "true" ]; then
             echo "rate_limited=true" >> $GITHUB_OUTPUT
-            echo "::warning::Pass 1 hit rate limit — pass 2 and 3 will be skipped"
+            echo "::warning::Pass 1 hit rate limit — pass 2 will be skipped"
           else
             echo "rate_limited=false" >> $GITHUB_OUTPUT
           fi
@@ -175,11 +212,11 @@ jobs:
         if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'success'
         id: pr_title
         run: |
-          WEEK="${{ needs.check.outputs.week }}"
+          DAY="${{ needs.check.outputs.day }}"
           if [ "${{ needs.check.outputs.focused }}" = "true" ]; then
-            echo "title=🤖 Auto-improve: ${{ needs.check.outputs.focus }} (Week $WEEK)" >> $GITHUB_OUTPUT
+            echo "title=🤖 Auto-improve: ${{ needs.check.outputs.focus }} ($DAY)" >> $GITHUB_OUTPUT
           else
-            echo "title=🤖 Auto-improve pass 1 — Week $WEEK" >> $GITHUB_OUTPUT
+            echo "title=🤖 Auto-improve pass 1 — $DAY" >> $GITHUB_OUTPUT
           fi
 
       - name: Create Pull Request
@@ -187,18 +224,21 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: auto-improve-w${{ needs.check.outputs.week }}-pass1-${{ github.run_number }}
+          branch: auto-improve-${{ needs.check.outputs.day }}-pass1-${{ github.run_number }}
           title: ${{ steps.pr_title.outputs.title }}
           body: |
-            ## Automatic improvements — pass 1 · Week ${{ needs.check.outputs.week }}
+            ## Automatic improvements — pass 1 · ${{ needs.check.outputs.day }}
 
             ### Summary of changes
             ${{ steps.run.outputs.summary }}
 
+            ### Token usage
+            - Input: ${{ steps.run.outputs.input_tokens }} | Output: ${{ steps.run.outputs.output_tokens }} | Cache read: ${{ steps.run.outputs.cache_read }}
+
             ---
             ⚠️ **Review before merging.**
           commit-message: |
-            🤖 auto-improve: week ${{ needs.check.outputs.week }}, pass 1
+            🤖 auto-improve: ${{ needs.check.outputs.day }}, pass 1
 
             ${{ steps.run.outputs.summary }}
           labels: "auto-improve,needs-review"
@@ -219,6 +259,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       rate_limited: ${{ steps.run.outputs.rate_limited }}
+      input_tokens: ${{ steps.run.outputs.input_tokens }}
+      output_tokens: ${{ steps.run.outputs.output_tokens }}
+      cache_read: ${{ steps.run.outputs.cache_read }}
 
     steps:
       - uses: actions/checkout@v4
@@ -256,7 +299,6 @@ jobs:
           No limit on the number of files you can modify.
 
           RULES:
-          - Zero observable behaviour changes
           - Do not rename public functions/classes/methods
           - Do not change function signatures
           - Do not delete code without verifying it is unreferenced
@@ -267,7 +309,7 @@ jobs:
           - What was changed and why
           " \
           --dangerously-skip-permissions \
-          --max-turns 60 \
+          --max-turns 40 \
           --output-format json > /tmp/claude-output.json 2>&1 || true
 
           if ! jq empty /tmp/claude-output.json 2>/dev/null; then
@@ -280,6 +322,21 @@ jobs:
           IS_ERROR=$(jq -r '.is_error // false' /tmp/claude-output.json 2>/dev/null)
           RESULT=$(jq -r '.result // ""' /tmp/claude-output.json 2>/dev/null)
           RAW_OUTPUT=$(cat /tmp/claude-output.json 2>/dev/null)
+
+          INPUT_TOKENS=$(jq -r '.usage.input_tokens // 0' /tmp/claude-output.json)
+          OUTPUT_TOKENS=$(jq -r '.usage.output_tokens // 0' /tmp/claude-output.json)
+          CACHE_READ=$(jq -r '.usage.cache_read_input_tokens // 0' /tmp/claude-output.json)
+
+          echo "### Token usage — Pass 2" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Input tokens | $INPUT_TOKENS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Output tokens | $OUTPUT_TOKENS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cache read | $CACHE_READ |" >> $GITHUB_STEP_SUMMARY
+
+          echo "input_tokens=$INPUT_TOKENS" >> $GITHUB_OUTPUT
+          echo "output_tokens=$OUTPUT_TOKENS" >> $GITHUB_OUTPUT
+          echo "cache_read=$CACHE_READ" >> $GITHUB_OUTPUT
 
           IS_RATE_LIMITED=false
           if echo "$RESULT$RAW_OUTPUT" | grep -qi "rate limit\|429\|too many requests"; then
@@ -295,7 +352,7 @@ jobs:
 
           if [ "$IS_RATE_LIMITED" = "true" ]; then
             echo "rate_limited=true" >> $GITHUB_OUTPUT
-            echo "::warning::Pass 2 hit rate limit — pass 3 will be skipped"
+            echo "::warning::Pass 2 hit rate limit"
           else
             echo "rate_limited=false" >> $GITHUB_OUTPUT
           fi
@@ -304,17 +361,6 @@ jobs:
           echo "summary<<EOF" >> $GITHUB_OUTPUT
           echo "$SUMMARY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Save diff artifact
-        if: steps.run.outputs.rate_limited != 'true'
-        run: git diff > /tmp/pass2.diff
-
-      - uses: actions/upload-artifact@v4
-        if: steps.run.outputs.rate_limited != 'true'
-        with:
-          name: diff-pass2
-          path: /tmp/pass2.diff
-          retention-days: 1
 
       - name: Check TypeScript
         id: tsc
@@ -327,18 +373,21 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: auto-improve-w${{ needs.check.outputs.week }}-pass2-${{ github.run_number }}
-          title: "🤖 Auto-improve pass 2 — Week ${{ needs.check.outputs.week }}"
+          branch: auto-improve-${{ needs.check.outputs.day }}-pass2-${{ github.run_number }}
+          title: "🤖 Auto-improve pass 2 — ${{ needs.check.outputs.day }}"
           body: |
-            ## Automatic improvements — pass 2 · Week ${{ needs.check.outputs.week }}
+            ## Automatic improvements — pass 2 · ${{ needs.check.outputs.day }}
 
             ### Summary of changes
             ${{ steps.run.outputs.summary }}
 
+            ### Token usage
+            - Input: ${{ steps.run.outputs.input_tokens }} | Output: ${{ steps.run.outputs.output_tokens }} | Cache read: ${{ steps.run.outputs.cache_read }}
+
             ---
             ⚠️ **Review before merging.**
           commit-message: |
-            🤖 auto-improve: week ${{ needs.check.outputs.week }}, pass 2
+            🤖 auto-improve: ${{ needs.check.outputs.day }}, pass 2
 
             ${{ steps.run.outputs.summary }}
           labels: "auto-improve,needs-review"
@@ -349,131 +398,3 @@ jobs:
           git checkout .
           git clean -fd
           echo "::warning::Pass 2 — TypeScript check failed. No PR was created."
-
-  pass-3:
-    needs: [check, pass-1, pass-2]
-    if: |
-      needs.check.outputs.should_run == 'true' &&
-      needs.check.outputs.focused != 'true' &&
-      needs.pass-1.outputs.rate_limited != 'true' &&
-      needs.pass-2.outputs.rate_limited != 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: diff-pass1
-          path: /tmp
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: diff-pass2
-          path: /tmp
-
-      - name: Install Claude Code
-        run: |
-          curl -fsSL https://claude.ai/install.sh | bash
-          echo "$HOME/.claude/bin" >> $GITHUB_PATH
-
-      - name: Run pass 3
-        id: run
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          PREV_DIFF=$(cat /tmp/pass1.diff /tmp/pass2.diff 2>/dev/null || echo "(no diff)")
-
-          claude -p "
-          Read CLAUDE.md before making any changes.
-
-          The previous passes already made these changes (combined git diff):
-          ---
-          $PREV_DIFF
-          ---
-
-          Find the next highest-value improvements in areas not already modified by the previous passes.
-          You can touch any area: TypeScript types, business logic, performance, tests, documentation,
-          processing rules, component architecture, security — whatever you judge most valuable.
-          No limit on the number of files you can modify.
-
-          RULES:
-          - Zero observable behaviour changes
-          - Do not rename public functions/classes/methods
-          - Do not change function signatures
-          - Do not delete code without verifying it is unreferenced
-          - If there is nothing clear to improve, do not force changes
-
-          When done, generate a Markdown summary of the changes:
-          - File modified
-          - What was changed and why
-          " \
-          --dangerously-skip-permissions \
-          --max-turns 40 \
-          --output-format json > /tmp/claude-output.json 2>&1 || true
-
-          if ! jq empty /tmp/claude-output.json 2>/dev/null; then
-            echo "::error::Pass 3 — Claude output is not valid JSON. Raw output:"
-            head -100 /tmp/claude-output.json
-            exit 0
-          fi
-
-          IS_ERROR=$(jq -r '.is_error // false' /tmp/claude-output.json 2>/dev/null)
-          RESULT=$(jq -r '.result // ""' /tmp/claude-output.json 2>/dev/null)
-          RAW_OUTPUT=$(cat /tmp/claude-output.json 2>/dev/null)
-
-          IS_RATE_LIMITED=false
-          if echo "$RESULT$RAW_OUTPUT" | grep -qi "rate limit\|429\|too many requests"; then
-            IS_RATE_LIMITED=true
-          fi
-
-          if [ "$IS_ERROR" = "true" ] && [ "$IS_RATE_LIMITED" = "false" ]; then
-            echo "::error::Pass 3 failed with a non-rate-limit error. Raw output:"
-            echo "$RAW_OUTPUT" | head -100
-            exit 0
-          fi
-
-          if [ "$IS_RATE_LIMITED" = "true" ]; then
-            echo "::warning::Pass 3 hit rate limit — no PR created for this pass"
-            exit 0
-          fi
-
-          SUMMARY=$(echo "$RESULT" | head -200)
-          echo "summary<<EOF" >> $GITHUB_OUTPUT
-          echo "$SUMMARY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Check TypeScript
-        id: tsc
-        run: docker compose run --rm omniticket sh -c "npm ci && npx tsc --noEmit"
-        continue-on-error: true
-
-      - name: Create Pull Request
-        if: steps.tsc.outcome == 'success'
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: auto-improve-w${{ needs.check.outputs.week }}-pass3-${{ github.run_number }}
-          title: "🤖 Auto-improve pass 3 — Week ${{ needs.check.outputs.week }}"
-          body: |
-            ## Automatic improvements — pass 3 · Week ${{ needs.check.outputs.week }}
-
-            ### Summary of changes
-            ${{ steps.run.outputs.summary }}
-
-            ---
-            ⚠️ **Review before merging.**
-          commit-message: |
-            🤖 auto-improve: week ${{ needs.check.outputs.week }}, pass 3
-
-            ${{ steps.run.outputs.summary }}
-          labels: "auto-improve,needs-review"
-
-      - name: Revert if TypeScript failed
-        if: steps.tsc.outcome == 'failure'
-        run: |
-          git checkout .
-          git clean -fd
-          echo "::warning::Pass 3 — TypeScript check failed. No PR was created."
