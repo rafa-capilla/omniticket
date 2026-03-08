@@ -119,10 +119,30 @@ jobs:
           --max-turns 80 \
           --output-format json > /tmp/claude-output.json 2>&1 || true
 
+          if ! jq empty /tmp/claude-output.json 2>/dev/null; then
+            echo "::error::Pass 1 — Claude output is not valid JSON. Raw output:"
+            head -100 /tmp/claude-output.json
+            echo "rate_limited=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           IS_ERROR=$(jq -r '.is_error // false' /tmp/claude-output.json 2>/dev/null)
           RESULT=$(jq -r '.result // ""' /tmp/claude-output.json 2>/dev/null)
+          RAW_OUTPUT=$(cat /tmp/claude-output.json 2>/dev/null)
 
-          if [ "$IS_ERROR" = "true" ] || echo "$RESULT" | grep -qi "rate limit\|429\|too many requests"; then
+          IS_RATE_LIMITED=false
+          if echo "$RESULT$RAW_OUTPUT" | grep -qi "rate limit\|429\|too many requests"; then
+            IS_RATE_LIMITED=true
+          fi
+
+          if [ "$IS_ERROR" = "true" ] && [ "$IS_RATE_LIMITED" = "false" ]; then
+            echo "::error::Pass 1 failed with a non-rate-limit error. Raw output:"
+            echo "$RAW_OUTPUT" | head -100
+            echo "rate_limited=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [ "$IS_RATE_LIMITED" = "true" ]; then
             echo "rate_limited=true" >> $GITHUB_OUTPUT
             echo "::warning::Pass 1 hit rate limit — pass 2 and 3 will be skipped"
           else
@@ -250,10 +270,30 @@ jobs:
           --max-turns 60 \
           --output-format json > /tmp/claude-output.json 2>&1 || true
 
+          if ! jq empty /tmp/claude-output.json 2>/dev/null; then
+            echo "::error::Pass 2 — Claude output is not valid JSON. Raw output:"
+            head -100 /tmp/claude-output.json
+            echo "rate_limited=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           IS_ERROR=$(jq -r '.is_error // false' /tmp/claude-output.json 2>/dev/null)
           RESULT=$(jq -r '.result // ""' /tmp/claude-output.json 2>/dev/null)
+          RAW_OUTPUT=$(cat /tmp/claude-output.json 2>/dev/null)
 
-          if [ "$IS_ERROR" = "true" ] || echo "$RESULT" | grep -qi "rate limit\|429\|too many requests"; then
+          IS_RATE_LIMITED=false
+          if echo "$RESULT$RAW_OUTPUT" | grep -qi "rate limit\|429\|too many requests"; then
+            IS_RATE_LIMITED=true
+          fi
+
+          if [ "$IS_ERROR" = "true" ] && [ "$IS_RATE_LIMITED" = "false" ]; then
+            echo "::error::Pass 2 failed with a non-rate-limit error. Raw output:"
+            echo "$RAW_OUTPUT" | head -100
+            echo "rate_limited=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [ "$IS_RATE_LIMITED" = "true" ]; then
             echo "rate_limited=true" >> $GITHUB_OUTPUT
             echo "::warning::Pass 2 hit rate limit — pass 3 will be skipped"
           else
@@ -374,10 +414,28 @@ jobs:
           --max-turns 40 \
           --output-format json > /tmp/claude-output.json 2>&1 || true
 
+          if ! jq empty /tmp/claude-output.json 2>/dev/null; then
+            echo "::error::Pass 3 — Claude output is not valid JSON. Raw output:"
+            head -100 /tmp/claude-output.json
+            exit 0
+          fi
+
           IS_ERROR=$(jq -r '.is_error // false' /tmp/claude-output.json 2>/dev/null)
           RESULT=$(jq -r '.result // ""' /tmp/claude-output.json 2>/dev/null)
+          RAW_OUTPUT=$(cat /tmp/claude-output.json 2>/dev/null)
 
-          if [ "$IS_ERROR" = "true" ] || echo "$RESULT" | grep -qi "rate limit\|429\|too many requests"; then
+          IS_RATE_LIMITED=false
+          if echo "$RESULT$RAW_OUTPUT" | grep -qi "rate limit\|429\|too many requests"; then
+            IS_RATE_LIMITED=true
+          fi
+
+          if [ "$IS_ERROR" = "true" ] && [ "$IS_RATE_LIMITED" = "false" ]; then
+            echo "::error::Pass 3 failed with a non-rate-limit error. Raw output:"
+            echo "$RAW_OUTPUT" | head -100
+            exit 0
+          fi
+
+          if [ "$IS_RATE_LIMITED" = "true" ]; then
             echo "::warning::Pass 3 hit rate limit — no PR created for this pass"
             exit 0
           fi
