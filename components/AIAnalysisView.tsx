@@ -80,8 +80,8 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
       const svc = new AIAnalysisService();
       const res = await svc.analyze(prompt, aggregatedData, settings.GEMINI_API_KEY);
       setResult(res);
-    } catch (err: any) {
-      toast.error('Error en análisis: ' + safeText(err.message));
+    } catch (err: unknown) {
+      toast.error('Error en análisis: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsAnalyzing(false);
     }
