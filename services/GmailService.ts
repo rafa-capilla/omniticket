@@ -36,6 +36,8 @@ function extractTextFromPayload(payload: any): string {
 }
 
 export class GmailService {
+  private readonly labelCache = new Map<string, string>();
+
   constructor(private accessToken: string) {}
 
   async searchThreads(query: string): Promise<string[]> {
@@ -80,13 +82,18 @@ export class GmailService {
   }
 
   private async getOrCreateLabel(name: string): Promise<string> {
+    if (this.labelCache.has(name)) return this.labelCache.get(name)!;
+
     const response = await apiFetch(
       'https://gmail.googleapis.com/gmail/v1/users/me/labels',
       { headers: { Authorization: `Bearer ${this.accessToken}` } }
     );
     const data = await response.json();
     const existing = data.labels.find((l: any) => l.name === name);
-    if (existing) return existing.id;
+    if (existing) {
+      this.labelCache.set(name, existing.id);
+      return existing.id;
+    }
 
     const createResponse = await apiFetch(
       'https://gmail.googleapis.com/gmail/v1/users/me/labels',
@@ -100,6 +107,7 @@ export class GmailService {
       }
     );
     const created = await createResponse.json();
+    this.labelCache.set(name, created.id);
     return created.id;
   }
 }

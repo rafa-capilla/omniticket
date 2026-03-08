@@ -10,8 +10,9 @@ export async function withRetry<T>(
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       return await fn();
-    } catch (err: any) {
-      const isRateLimit = err?.message?.includes('429') || err?.message?.includes('Rate limit');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isRateLimit = msg.includes('429') || msg.includes('Rate limit');
       const isLastAttempt = attempt === maxAttempts - 1;
 
       if (isLastAttempt || !isRateLimit) throw err;

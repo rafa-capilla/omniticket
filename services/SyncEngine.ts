@@ -28,8 +28,8 @@ export class SyncEngine {
 
   async runSync(onProgress?: (msg: string) => void): Promise<SyncResult[]> {
     onProgress?.("Validando conexión con base de datos...");
-    const settings = await this.config.getSettings();
     const spreadsheetId = await this.config.getOrFindId();
+    const settings = await this.config.getSettings(spreadsheetId);
 
     onProgress?.("Cargando categorías y reglas...");
     const categories: Category[] = await this.sheets.getCategories(spreadsheetId);

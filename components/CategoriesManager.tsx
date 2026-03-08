@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Category } from '../types';
 import { SheetsService } from '../services/SheetsService';
 import { useApp } from '../contexts/AppContext';
@@ -28,8 +28,8 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
   const [deleteModal, setDeleteModal] = useState<{ index: number; name: string; replacement: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const activeCategories = categories.filter(c => c.status === 'active');
-  const sheets = new SheetsService(token);
+  const activeCategories = useMemo(() => categories.filter(c => c.status === 'active'), [categories]);
+  const sheets = useMemo(() => new SheetsService(token), [token]);
 
   const handleAdd = async () => {
     if (!newCat.name.trim()) return;
@@ -78,13 +78,16 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
     setIsLoading(true);
     try {
       if (replacement) {
-        await sheets.updateCategoryInGastos(dbId, name, replacement);
-        const allRules = await sheets.getRules(dbId);
-        for (let i = 0; i < allRules.length; i++) {
-          if (allRules[i].category === name) {
-            await sheets.updateRule(dbId, i + 2, { ...allRules[i], category: replacement });
-          }
-        }
+        const [, allRules] = await Promise.all([
+          sheets.updateCategoryInGastos(dbId, name, replacement),
+          sheets.getRules(dbId),
+        ]);
+        const ruleUpdates = allRules.flatMap((rule, i) =>
+          rule.category === name
+            ? [sheets.updateRule(dbId, i + 2, { ...rule, category: replacement })]
+            : []
+        );
+        await Promise.all(ruleUpdates);
       }
       await sheets.deleteCategory(dbId, index + 2);
       setDeleteModal(null);

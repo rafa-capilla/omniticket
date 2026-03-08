@@ -115,16 +115,34 @@ const App: React.FC = () => {
     if (!token || !dbId) return;
     const sheets = new SheetsService(token);
     try {
-      const [lines, hist, r, cats] = await Promise.all([
+      // Fetch lines, rules and categories in parallel.
+      // History is derived from the already-fetched lines, avoiding a duplicate
+      // fetchAllLineItems call that fetchHistory() would otherwise make internally.
+      const [lines, r, cats] = await Promise.all([
         sheets.fetchAllLineItems(dbId),
-        sheets.fetchHistory(dbId),
         sheets.getRules(dbId),
         sheets.getCategories(dbId),
       ]);
       setRawLines(lines);
-      setHistory(hist as HistoryTicket[]);
       setRules(r as Rule[]);
       setCategories(cats as Category[]);
+
+      // Derive history from raw lines (same logic as SheetsService.fetchHistory)
+      const historyMap = new Map<string, HistoryTicket>();
+      lines.forEach((row: any[]) => {
+        const id = safeText(row[0]);
+        if (!id) return;
+        const tienda = safeText(row[1]);
+        const fecha = safeText(row[2]);
+        const producto = safeText(row[3]);
+        const total = safeNum(row[8]);
+        if (producto === '--- TOTAL TICKET ---') {
+          historyMap.set(id, { id, tienda, fecha, total });
+        } else if (!historyMap.has(id)) {
+          historyMap.set(id, { id, tienda, fecha, total: 0 });
+        }
+      });
+      setHistory(Array.from(historyMap.values()).sort((a, b) => b.fecha.localeCompare(a.fecha)));
     } catch (err: any) {
       if (err.message === '401') {
         toast.error('Sesión expirada. Haz clic en "Reconectar" para continuar.');
@@ -232,7 +250,7 @@ const App: React.FC = () => {
               OMNI
             </div>
             <nav className="hidden lg:flex items-center space-x-2">
-              {['LENSES', 'HISTORY', 'RULES', 'CATEGORIES', 'SETTINGS'].map(v => (
+              {(['LENSES', 'HISTORY', 'RULES', 'CATEGORIES', 'SETTINGS'] as const).map(v => (
                 <button
                   key={v}
                   onClick={() => setCurrentView(v)}
