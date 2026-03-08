@@ -3,7 +3,7 @@ import { GoogleAuthService } from './services/GoogleAuthService';
 import { SyncEngine } from './services/SyncEngine';
 import { ConfigService } from './services/ConfigService';
 import { SheetsService } from './services/SheetsService';
-import { HistoryTicket, LensType, Rule, Category } from './types';
+import { HistoryTicket, LensType, Rule, Category, ViewState } from './types';
 import { safeText, safeNum } from './lib/utils';
 import { AppContext } from './contexts/AppContext';
 import { ToastItem, ToastList } from './components/ToastList';
@@ -21,7 +21,7 @@ const App: React.FC = () => {
   const [token, setToken]               = useState<string | null>(null);
   const [dbId, setDbId]                 = useState<string | null>(null);
   const [appState, setAppState]         = useState<'LOGIN' | 'LOADING' | 'READY'>('LOGIN');
-  const [currentView, setCurrentView]   = useState('LENSES');
+  const [currentView, setCurrentView]   = useState<ViewState>('LENSES');
   const [currentLens, setCurrentLens]   = useState<LensType>('products');
   const [isSyncing, setIsSyncing]       = useState(false);
   const [progressMsg, setProgressMsg]   = useState('');
@@ -98,9 +98,10 @@ const App: React.FC = () => {
       setDbId(id);
       setAppState('READY');
       isBootstrapped.current = true;
-    } catch (err: any) {
-      if (err.message === '401') handleLogout();
-      else setProgressMsg('Error: ' + safeText(err.message));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === '401') handleLogout();
+      else setProgressMsg('Error: ' + msg);
     }
   }, [handleLogout]);
 
@@ -143,8 +144,9 @@ const App: React.FC = () => {
         }
       });
       setHistory(Array.from(historyMap.values()).sort((a, b) => b.fecha.localeCompare(a.fecha)));
-    } catch (err: any) {
-      if (err.message === '401') {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === '401') {
         toast.error('Sesión expirada. Haz clic en "Reconectar" para continuar.');
       } else {
         console.error('Error al cargar datos', err);
@@ -164,11 +166,12 @@ const App: React.FC = () => {
       await engine.runSync(msg => setProgressMsg(safeText(msg)));
       await loadData();
       toast.success('Sincronización completada.');
-    } catch (err: any) {
-      if (err.message === '401') {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === '401') {
         toast.error('Sesión expirada. Haz clic en "Reconectar" para continuar.');
       } else {
-        toast.error('Error en sync: ' + safeText(err.message));
+        toast.error('Error en sync: ' + msg);
       }
     } finally {
       setIsSyncing(false);

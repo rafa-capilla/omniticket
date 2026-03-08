@@ -1,11 +1,17 @@
 
 import { apiFetch } from './apiFetch';
 
+interface GmailPayload {
+  mimeType?: string;
+  body?: { data?: string };
+  parts?: GmailPayload[];
+}
+
 /**
  * Extrae texto de un payload de Gmail de forma recursiva.
  * Prioriza text/plain > text/html > recursión en sub-partes multipart.
  */
-function extractTextFromPayload(payload: any): string {
+function extractTextFromPayload(payload: GmailPayload): string {
   // Caso base: el payload tiene body con datos directamente
   if (payload.body?.data) {
     try {
@@ -15,7 +21,7 @@ function extractTextFromPayload(payload: any): string {
     }
   }
 
-  const parts: any[] = payload.parts || [];
+  const parts = payload.parts ?? [];
   if (parts.length === 0) return '';
 
   // Prioridad 1: text/plain (ideal para Gemini, sin ruido de HTML)

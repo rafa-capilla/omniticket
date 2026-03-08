@@ -14,8 +14,8 @@ export const ticketItemSchema = z.object({
 export const ticketSchema = z.object({
   id: z.string(),
   tienda: z.string().min(1, "Tienda es requerida"),
-  fecha: z.string(),
-  items: z.array(ticketItemSchema),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha debe ser YYYY-MM-DD'),
+  items: z.array(ticketItemSchema).min(1, 'El ticket debe tener al menos un producto'),
   total_ticket: z.number().min(0),
 });
 
