@@ -20,7 +20,7 @@ export const SettingsView: React.FC<Props> = ({ onLogout }) => {
 
   useEffect(() => {
     const config = new ConfigService(token);
-    config.getSettings().then(s => {
+    config.getSettings(dbId).then(s => {
       setSettings({
         GMAIL_SEARCH_LABEL: s.GMAIL_SEARCH_LABEL,
         GMAIL_PROCESSED_LABEL: s.GMAIL_PROCESSED_LABEL,

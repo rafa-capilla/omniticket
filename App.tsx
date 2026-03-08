@@ -232,7 +232,7 @@ const App: React.FC = () => {
               OMNI
             </div>
             <nav className="hidden lg:flex items-center space-x-2">
-              {['LENSES', 'HISTORY', 'RULES', 'CATEGORIES', 'SETTINGS'].map(v => (
+              {(['LENSES', 'HISTORY', 'RULES', 'CATEGORIES', 'SETTINGS'] as const).map(v => (
                 <button
                   key={v}
                   onClick={() => setCurrentView(v)}
