@@ -7,7 +7,7 @@ import { useApp } from '../contexts/AppContext';
 import { safeText, safeNum, COLORS } from '../lib/utils';
 
 interface Props {
-  rawLines: any[];
+  rawLines: string[][];
   dateRange: { start: string; end: string };
   categories: Category[];
 }
@@ -31,11 +31,11 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
     const prodMap = new Map<string, number>();
     const storeMap = new Map<string, number>();
 
-    rawLines.forEach((row: any[]) => {
-      const date = safeText(row[2] ?? '');
+    rawLines.forEach((row: string[]) => {
+      const date = row[2] ?? '';
       if (date < dateRange.start || date > dateRange.end) return;
 
-      if (safeText(row[3]) === '--- TOTAL TICKET ---') {
+      if (row[3] === '--- TOTAL TICKET ---') {
         totalSpent += safeNum(row[8]);
         ticketCount++;
       } else {

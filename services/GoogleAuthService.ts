@@ -1,5 +1,14 @@
 
-// Fix: Declare google as a global variable to satisfy TypeScript since it is loaded via script tag
+// Minimal types for Google Identity Services (loaded via script tag, no @types package)
+interface TokenResponse {
+  access_token?: string;
+}
+
+interface TokenClient {
+  requestAccessToken(opts: { prompt: string }): void;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const google: any;
 
 const TOKEN_KEY = 'google_access_token';
@@ -15,7 +24,7 @@ export class GoogleAuthService {
     'https://www.googleapis.com/auth/drive.file',
   ].join(' ');
 
-  private static tokenClient: any = null;
+  private static tokenClient: TokenClient | null = null;
 
   static init(callback: (token: string) => void, clientId: string) {
     if (typeof google === 'undefined') {
@@ -26,7 +35,7 @@ export class GoogleAuthService {
     this.tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: this.SCOPES,
-      callback: (response: any) => {
+      callback: (response: TokenResponse) => {
         if (response.access_token) {
           localStorage.setItem(TOKEN_KEY, response.access_token);
           localStorage.setItem(TOKEN_EXPIRES_KEY, String(Date.now() + TOKEN_LIFETIME_MS));

@@ -28,7 +28,7 @@ export class SheetsService {
     );
   }
 
-  async fetchAllLineItems(spreadsheetId: string): Promise<any[]> {
+  async fetchAllLineItems(spreadsheetId: string): Promise<string[][]> {
     const response = await apiFetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A2:J10000`,
       { headers: { Authorization: `Bearer ${this.accessToken}` } }
@@ -41,12 +41,12 @@ export class SheetsService {
     const rows = await this.fetchAllLineItems(spreadsheetId);
     const historyMap = new Map<string, HistoryTicket>();
 
-    rows.forEach((row: any[]) => {
+    rows.forEach((row: string[]) => {
       const id = row[0];
       const tienda = row[1];
       const fecha = row[2];
       const producto = row[3];
-      const totalStr = String(row[8] || '0').replace(/[^\d.,-]/g, '').replace(',', '.');
+      const totalStr = (row[8] ?? '0').replace(/[^\d.,-]/g, '').replace(',', '.');
       const total = parseFloat(totalStr) || 0;
 
       if (!id) return;
@@ -132,9 +132,9 @@ export class SheetsService {
     const rows = await this.fetchAllLineItems(spreadsheetId);
     const batchData: { range: string; values: string[][] }[] = [];
 
-    rows.forEach((row: any[], index: number) => {
+    rows.forEach((row: string[], index: number) => {
       const rowNum = index + 2; // +2: row 1 is header, array is 0-indexed
-      const cat = String(row[4] || '');
+      const cat = row[4] ?? '';
       if (cat === oldName) {
         batchData.push({ range: `Gastos!E${rowNum}`, values: [[newName]] });
       }
@@ -227,7 +227,7 @@ export class SheetsService {
         { headers: { Authorization: `Bearer ${this.accessToken}` } }
       );
       const data = await response.json();
-      const sheet = (data.sheets || []).find((s: any) => s.properties?.title === sheetName);
+      const sheet = (data.sheets || []).find((s: { properties?: { title?: string; sheetId?: number } }) => s.properties?.title === sheetName);
       return sheet?.properties?.sheetId ?? null;
     } catch {
       return null;
