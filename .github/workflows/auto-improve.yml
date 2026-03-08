@@ -186,10 +186,11 @@ jobs:
             echo "rate_limited=false" >> $GITHUB_OUTPUT
           fi
 
-          SUMMARY=$(echo "$RESULT" | head -200)
-          echo "summary<<EOF" >> $GITHUB_OUTPUT
-          echo "$SUMMARY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "$RESULT" > /tmp/claude-summary-pass1.md
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Summary of changes — Pass 1" >> $GITHUB_STEP_SUMMARY
+          cat /tmp/claude-summary-pass1.md >> $GITHUB_STEP_SUMMARY
 
       - name: Save diff artifact
         if: steps.run.outputs.rate_limited != 'true'
@@ -219,6 +220,23 @@ jobs:
             echo "title=🤖 Auto-improve pass 1 — $DAY" >> $GITHUB_OUTPUT
           fi
 
+      - name: Build PR body pass 1
+        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'success'
+        run: |
+          DAY="${{ needs.check.outputs.day }}"
+          {
+            echo "## Automatic improvements — pass 1 · $DAY"
+            echo ""
+            echo "### Summary of changes"
+            cat /tmp/claude-summary-pass1.md
+            echo ""
+            echo "### Token usage"
+            echo "- Input: ${{ steps.run.outputs.input_tokens }} | Output: ${{ steps.run.outputs.output_tokens }} | Cache read: ${{ steps.run.outputs.cache_read }}"
+            echo ""
+            echo "---"
+            echo "⚠️ **Review before merging.**"
+          } > /tmp/pr-body-pass1.md
+
       - name: Create Pull Request
         if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'success'
         uses: peter-evans/create-pull-request@v6
@@ -226,21 +244,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: auto-improve-${{ needs.check.outputs.day }}-pass1-${{ github.run_number }}
           title: ${{ steps.pr_title.outputs.title }}
-          body: |
-            ## Automatic improvements — pass 1 · ${{ needs.check.outputs.day }}
-
-            ### Summary of changes
-            ${{ steps.run.outputs.summary }}
-
-            ### Token usage
-            - Input: ${{ steps.run.outputs.input_tokens }} | Output: ${{ steps.run.outputs.output_tokens }} | Cache read: ${{ steps.run.outputs.cache_read }}
-
-            ---
-            ⚠️ **Review before merging.**
-          commit-message: |
-            🤖 auto-improve: ${{ needs.check.outputs.day }}, pass 1
-
-            ${{ steps.run.outputs.summary }}
+          body-path: /tmp/pr-body-pass1.md
+          commit-message: "🤖 auto-improve: ${{ needs.check.outputs.day }}, pass 1"
           labels: "auto-improve,needs-review"
 
       - name: Revert if TypeScript failed
@@ -357,16 +362,34 @@ jobs:
             echo "rate_limited=false" >> $GITHUB_OUTPUT
           fi
 
-          SUMMARY=$(echo "$RESULT" | head -200)
-          echo "summary<<EOF" >> $GITHUB_OUTPUT
-          echo "$SUMMARY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "$RESULT" > /tmp/claude-summary-pass2.md
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Summary of changes — Pass 2" >> $GITHUB_STEP_SUMMARY
+          cat /tmp/claude-summary-pass2.md >> $GITHUB_STEP_SUMMARY
 
       - name: Check TypeScript
         id: tsc
         if: steps.run.outputs.rate_limited != 'true'
         run: docker compose run --rm omniticket sh -c "npm ci && npx tsc --noEmit"
         continue-on-error: true
+
+      - name: Build PR body pass 2
+        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'success'
+        run: |
+          DAY="${{ needs.check.outputs.day }}"
+          {
+            echo "## Automatic improvements — pass 2 · $DAY"
+            echo ""
+            echo "### Summary of changes"
+            cat /tmp/claude-summary-pass2.md
+            echo ""
+            echo "### Token usage"
+            echo "- Input: ${{ steps.run.outputs.input_tokens }} | Output: ${{ steps.run.outputs.output_tokens }} | Cache read: ${{ steps.run.outputs.cache_read }}"
+            echo ""
+            echo "---"
+            echo "⚠️ **Review before merging.**"
+          } > /tmp/pr-body-pass2.md
 
       - name: Create Pull Request
         if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'success'
@@ -375,21 +398,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: auto-improve-${{ needs.check.outputs.day }}-pass2-${{ github.run_number }}
           title: "🤖 Auto-improve pass 2 — ${{ needs.check.outputs.day }}"
-          body: |
-            ## Automatic improvements — pass 2 · ${{ needs.check.outputs.day }}
-
-            ### Summary of changes
-            ${{ steps.run.outputs.summary }}
-
-            ### Token usage
-            - Input: ${{ steps.run.outputs.input_tokens }} | Output: ${{ steps.run.outputs.output_tokens }} | Cache read: ${{ steps.run.outputs.cache_read }}
-
-            ---
-            ⚠️ **Review before merging.**
-          commit-message: |
-            🤖 auto-improve: ${{ needs.check.outputs.day }}, pass 2
-
-            ${{ steps.run.outputs.summary }}
+          body-path: /tmp/pr-body-pass2.md
+          commit-message: "🤖 auto-improve: ${{ needs.check.outputs.day }}, pass 2"
           labels: "auto-improve,needs-review"
 
       - name: Revert if TypeScript failed
