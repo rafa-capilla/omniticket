@@ -7,7 +7,7 @@ import { safeText, safeNum, COLORS } from '../lib/utils';
 interface Props {
   currentLens: LensType;
   setCurrentLens: (lens: LensType) => void;
-  rawLines: any[];
+  rawLines: string[][];
   dateRange: { start: string; end: string };
   setDateRange: React.Dispatch<React.SetStateAction<{ start: string; end: string }>>;
   rules: Rule[];
@@ -28,11 +28,11 @@ export const LensesView: React.FC<Props> = ({
 
   const processedData = useMemo(() => {
     return rawLines
-      .filter((row: any) => {
-        const date = safeText(row[2] ?? '');
+      .filter((row: string[]) => {
+        const date = row[2] ?? '';
         return date >= dateRange.start && date <= dateRange.end;
       })
-      .map((row: any) => {
+      .map((row: string[]) => {
         const originalName = safeText(row[3] ?? '');
         if (originalName === '--- TOTAL TICKET ---' || !originalName) return row;
 
@@ -60,8 +60,8 @@ export const LensesView: React.FC<Props> = ({
     let count = 0;
     const catMap = new Map<string, number>();
 
-    processedData.forEach((row: any) => {
-      if (safeText(row[3]) === '--- TOTAL TICKET ---') {
+    processedData.forEach((row: string[]) => {
+      if (row[3] === '--- TOTAL TICKET ---') {
         total += safeNum(row[8]);
         count++;
       } else {
@@ -80,8 +80,8 @@ export const LensesView: React.FC<Props> = ({
   const lensData = useMemo(() => {
     if (currentLens === 'categories') {
       const agg = new Map<string, number>(activeCategories.map(c => [c.name, 0]));
-      processedData.forEach((row: any) => {
-        if (safeText(row[3]) === '--- TOTAL TICKET ---' || !safeText(row[3])) return;
+      processedData.forEach((row: string[]) => {
+        if (row[3] === '--- TOTAL TICKET ---' || !row[3]) return;
         const key = safeText(row[4]);
         agg.set(key, (agg.get(key) ?? 0) + safeNum(row[8]));
       });
@@ -89,7 +89,7 @@ export const LensesView: React.FC<Props> = ({
     }
 
     const agg = new Map<string, number>();
-    processedData.forEach((row: any) => {
+    processedData.forEach((row: string[]) => {
       let key = '';
       if (currentLens === 'products') key = safeText(row[3]);
       else if (currentLens === 'stores') key = safeText(row[1]);

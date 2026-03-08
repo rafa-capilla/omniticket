@@ -1,11 +1,25 @@
 
 import { apiFetch } from './apiFetch';
 
+interface GmailThread {
+  id: string;
+}
+
+interface GmailLabel {
+  id: string;
+  name: string;
+  
+interface GmailPayload {
+  mimeType?: string;
+  body?: { data?: string };
+  parts?: GmailPayload[];
+}
+
 /**
  * Extrae texto de un payload de Gmail de forma recursiva.
  * Prioriza text/plain > text/html > recursión en sub-partes multipart.
  */
-function extractTextFromPayload(payload: any): string {
+function extractTextFromPayload(payload: GmailPayload): string {
   // Caso base: el payload tiene body con datos directamente
   if (payload.body?.data) {
     try {
@@ -15,7 +29,7 @@ function extractTextFromPayload(payload: any): string {
     }
   }
 
-  const parts: any[] = payload.parts || [];
+  const parts = payload.parts ?? [];
   if (parts.length === 0) return '';
 
   // Prioridad 1: text/plain (ideal para Gemini, sin ruido de HTML)
@@ -46,7 +60,7 @@ export class GmailService {
       { headers: { Authorization: `Bearer ${this.accessToken}` } }
     );
     const data = await response.json();
-    return (data.threads || []).map((t: any) => t.id);
+    return (data.threads || []).map((t: GmailThread) => t.id);
   }
 
   async getThreadContent(threadId: string): Promise<string> {
@@ -89,7 +103,7 @@ export class GmailService {
       { headers: { Authorization: `Bearer ${this.accessToken}` } }
     );
     const data = await response.json();
-    const existing = data.labels.find((l: any) => l.name === name);
+    const existing = (data.labels as GmailLabel[]).find(l => l.name === name);
     if (existing) {
       this.labelCache.set(name, existing.id);
       return existing.id;
