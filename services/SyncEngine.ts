@@ -71,8 +71,8 @@ export class SyncEngine {
 
         results.push({ messageId: threadId, status: 'success' });
         onProgress?.(`✓ Ticket ${ticketNum}: ${ticketData.tienda} (${ticketData.fecha})`);
-      } catch (error: any) {
-        const msg = String(error?.message || error);
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
         console.error(`Error en thread ${threadId}:`, error);
         results.push({ messageId: threadId, status: 'error', error: msg });
         onProgress?.(`✗ Ticket ${ticketNum}: ${msg}`);

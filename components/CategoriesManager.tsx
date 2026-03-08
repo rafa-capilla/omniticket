@@ -38,8 +38,8 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
       await sheets.addCategory(dbId, { name: newCat.name.trim(), description: newCat.description.trim(), status: 'active' });
       setNewCat({ name: '', description: '' });
       loadData();
-    } catch (err: any) {
-      toast.error('Error al añadir: ' + safeText(err.message));
+    } catch (err: unknown) {
+      toast.error('Error al añadir: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsLoading(false);
     }
@@ -54,8 +54,8 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
       await sheets.updateCategory(dbId, editingIndex + 2, updated); // +2: header + 0-indexed
       setEditingIndex(null);
       loadData();
-    } catch (err: any) {
-      toast.error('Error al editar: ' + safeText(err.message));
+    } catch (err: unknown) {
+      toast.error('Error al editar: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsLoading(false);
     }
@@ -92,8 +92,8 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
       await sheets.deleteCategory(dbId, index + 2);
       setDeleteModal(null);
       loadData();
-    } catch (err: any) {
-      toast.error('Error al eliminar: ' + safeText(err.message));
+    } catch (err: unknown) {
+      toast.error('Error al eliminar: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsLoading(false);
     }

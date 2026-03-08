@@ -41,8 +41,8 @@ export const SettingsView: React.FC<Props> = ({ onLogout }) => {
       ]);
       await loadData();
       toast.success('Ajustes guardados.');
-    } catch (err: any) {
-      toast.error('Error al guardar: ' + safeText(err.message));
+    } catch (err: unknown) {
+      toast.error('Error al guardar: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsSaving(false);
     }

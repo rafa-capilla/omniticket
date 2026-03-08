@@ -1,5 +1,5 @@
 
-import { TicketData, HistoryTicket, ProductMapping, Rule, Category } from '../types';
+import { TicketData, HistoryTicket, Rule, Category } from '../types';
 import { apiFetch } from './apiFetch';
 
 export class SheetsService {
@@ -73,7 +73,7 @@ export class SheetsService {
       return (data.values || []).map((row: string[]) => ({
         name: String(row[0] || ''),
         description: String(row[1] || ''),
-        status: (String(row[2] || 'active')) as 'active' | 'archived'
+        status: (String(row[2] || 'active')) as 'active' | 'inactive'
       })).filter((c: Category) => c.name);
     } catch {
       return [];
@@ -216,23 +216,6 @@ export class SheetsService {
         })
       }
     );
-  }
-
-  // ─── MAPPINGS (legacy, kept for backward compat) ──────────────────────────
-
-  async getMappings(spreadsheetId: string): Promise<ProductMapping[]> {
-    try {
-      const response = await apiFetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Mapping_Cache!A:B`,
-        { headers: { Authorization: `Bearer ${this.accessToken}` } }
-      );
-      const data = await response.json();
-      return (data.values || [])
-        .filter((row: any[]) => row.length >= 2)
-        .map((row: string[]) => ({ original: row[0], simplificado: row[1] }));
-    } catch {
-      return [];
-    }
   }
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────

@@ -37,10 +37,6 @@ export interface HistoryTicket {
   total: number;
 }
 
-export interface ProductMapping {
-  original: string;
-  simplificado: string;
-}
 
 export interface Rule {
   pattern: string;
@@ -51,7 +47,7 @@ export interface Rule {
 export interface Category {
   name: string;
   description: string;
-  status: 'active' | 'archived';
+  status: 'active' | 'inactive';
 }
 
 export interface DashboardStats {
