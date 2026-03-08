@@ -28,7 +28,7 @@ export const SettingsView: React.FC<Props> = ({ onLogout }) => {
       });
       setLoaded(true);
     }).catch(console.error);
-  }, [token]);
+  }, [token, dbId]);
 
   const handleSave = async () => {
     setIsSaving(true);

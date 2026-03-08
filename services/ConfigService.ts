@@ -30,7 +30,7 @@ export class ConfigService {
     const data = await response.json();
     const fileId = data.files?.[0]?.id;
     if (!fileId) throw new Error("NOT_FOUND");
-    this.spreadsheetId = String(fileId || '');
+    this.spreadsheetId = String(fileId);
     return this.spreadsheetId;
   }
 
