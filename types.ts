@@ -76,3 +76,32 @@ export interface AggregatedData {
 
 export type ViewState = 'LENSES' | 'HISTORY' | 'RULES' | 'CATEGORIES' | 'SETTINGS';
 export type LensType = 'products' | 'categories' | 'stores' | 'analysis';
+
+// ─── Google API response shapes ───────────────────────────────────────────────
+// Minimal subsets of Google API responses actually consumed by the app.
+// Typing these prevents implicit `any` on `response.json()` call-sites.
+
+/** Google Sheets API — values.get / values.batchGet */
+export interface SheetsValuesResponse {
+  values?: string[][];
+  range?: string;
+  majorDimension?: string;
+}
+
+/** Google Sheets API — spreadsheets.get (fields=sheets.properties) */
+export interface SheetsMetadataResponse {
+  sheets?: Array<{
+    properties?: {
+      title?: string;
+      sheetId?: number;
+    };
+  }>;
+}
+
+/** Google Drive API — files.list */
+export interface DriveFilesResponse {
+  files?: Array<{
+    id: string;
+    name: string;
+  }>;
+}
