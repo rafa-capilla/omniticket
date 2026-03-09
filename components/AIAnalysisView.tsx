@@ -31,6 +31,8 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
     const prodMap = new Map<string, number>();
     const storeMap = new Map<string, number>();
 
+    const lineItems: string[] = [];
+
     rawLines.forEach((row: string[]) => {
       const date = row[2] ?? '';
       if (date < dateRange.start || date > dateRange.end) return;
@@ -46,6 +48,9 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
         catMap.set(cat, (catMap.get(cat) ?? 0) + amount);
         if (prod) prodMap.set(prod, (prodMap.get(prod) ?? 0) + amount);
         if (store) storeMap.set(store, (storeMap.get(store) ?? 0) + amount);
+        const cant = row[6] ?? '';
+        const pUnit = safeNum(row[5]);
+        lineItems.push(`${date}|${store}|${prod}|${cat}|${cant}|${pUnit.toFixed(2)}€|${amount.toFixed(2)}€`);
       }
     });
 
@@ -64,6 +69,7 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
       byStore: Array.from(storeMap.entries())
         .map(([name, total]) => ({ name, total }))
         .sort((a, b) => b.total - a.total),
+      lineItems,
     };
   }, [rawLines, dateRange, categories]);
 

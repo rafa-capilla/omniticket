@@ -25,11 +25,16 @@ ${data.byProduct.slice(0, 50).map(p => `- ${p.name}: ${p.total.toFixed(2)}€`).
 POR TIENDA:
 ${data.byStore.map(s => `- ${s.name}: ${s.total.toFixed(2)}€`).join('\n')}`;
 
+    const MAX_LINES = 500;
+    const lineItemsSection = data.lineItems.length > 0
+      ? `\n\nLÍNEAS DE GASTO INDIVIDUALES (${Math.min(data.lineItems.length, MAX_LINES)} de ${data.lineItems.length} filas):\nfecha|tienda|producto|categoría|cant|precio_unit|total\n${data.lineItems.slice(0, MAX_LINES).join('\n')}`
+      : '';
+
     return withRetry(async () => {
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-2.5-pro",
-        contents: `${prompt}\n\n${dataContext}`,
+        contents: `${prompt}\n\n${dataContext}${lineItemsSection}`,
         config: {
           systemInstruction: `Eres un experto en análisis de gastos de supermercado. Analiza los datos del usuario y responde a su consulta de forma concisa, útil y en español.
 Genera también datos para un gráfico que ilustre tu análisis: elige 'pie' para distribuciones proporcionales o 'bar' para comparaciones de magnitud.

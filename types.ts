@@ -71,6 +71,7 @@ export interface AggregatedData {
   byCategory: { name: string; total: number; percentage: number }[];
   byProduct: { name: string; total: number }[];
   byStore: { name: string; total: number }[];
+  lineItems: string[];
 }
 
 export type ViewState = 'LENSES' | 'HISTORY' | 'RULES' | 'CATEGORIES' | 'SETTINGS';
