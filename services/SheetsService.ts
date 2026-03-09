@@ -1,5 +1,5 @@
 
-import { TicketData, HistoryTicket, Rule, Category } from '../types';
+import { TicketData, Rule, Category } from '../types';
 import { apiFetch } from './apiFetch';
 
 export class SheetsService {
@@ -37,30 +37,6 @@ export class SheetsService {
     return data.values || [];
   }
 
-  async fetchHistory(spreadsheetId: string): Promise<HistoryTicket[]> {
-    const rows = await this.fetchAllLineItems(spreadsheetId);
-    const historyMap = new Map<string, HistoryTicket>();
-
-    rows.forEach((row: string[]) => {
-      const id = row[0];
-      const tienda = row[1];
-      const fecha = row[2];
-      const producto = row[3];
-      const totalStr = (row[8] ?? '0').replace(/[^\d.,-]/g, '').replace(',', '.');
-      const total = parseFloat(totalStr) || 0;
-
-      if (!id) return;
-
-      if (producto === '--- TOTAL TICKET ---') {
-        historyMap.set(id, { id, tienda, fecha, total });
-      } else if (!historyMap.has(id)) {
-        historyMap.set(id, { id, tienda, fecha, total: 0 });
-      }
-    });
-
-    return Array.from(historyMap.values()).sort((a, b) => b.fecha.localeCompare(a.fecha));
-  }
-
   // ─── CATEGORIES ───────────────────────────────────────────────────────────
 
   async getCategories(spreadsheetId: string): Promise<Category[]> {
@@ -73,7 +49,7 @@ export class SheetsService {
       return (data.values || []).map((row: string[]) => ({
         name: String(row[0] || ''),
         description: String(row[1] || ''),
-        status: (String(row[2] || 'active')) as 'active' | 'inactive'
+        status: String(row[2] || '').toLowerCase() === 'inactive' ? 'inactive' as const : 'active' as const,
       })).filter((c: Category) => c.name);
     } catch {
       return [];

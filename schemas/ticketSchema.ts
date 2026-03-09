@@ -18,5 +18,3 @@ export const ticketSchema = z.object({
   items: z.array(ticketItemSchema).min(1, 'El ticket debe tener al menos un producto'),
   total_ticket: z.number().min(0),
 });
-
-export type TicketData = z.infer<typeof ticketSchema>;

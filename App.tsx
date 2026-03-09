@@ -26,7 +26,7 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing]       = useState(false);
   const [progressMsg, setProgressMsg]   = useState('');
   const [history, setHistory]           = useState<HistoryTicket[]>([]);
-  const [rawLines, setRawLines]         = useState<any[]>([]);
+  const [rawLines, setRawLines]         = useState<string[][]>([]);
   const [rules, setRules]               = useState<Rule[]>([]);
   const [categories, setCategories]     = useState<Category[]>([]);
 
@@ -125,12 +125,12 @@ const App: React.FC = () => {
         sheets.getCategories(dbId),
       ]);
       setRawLines(lines);
-      setRules(r as Rule[]);
-      setCategories(cats as Category[]);
+      setRules(r);
+      setCategories(cats);
 
       // Derive history from raw lines (same logic as SheetsService.fetchHistory)
       const historyMap = new Map<string, HistoryTicket>();
-      lines.forEach((row: any[]) => {
+      lines.forEach((row) => {
         const id = safeText(row[0]);
         if (!id) return;
         const tienda = safeText(row[1]);
@@ -182,7 +182,7 @@ const App: React.FC = () => {
   // Counts per category name — passed to CategoriesManager for delete confirmation
   const categoryCounts = useMemo(() => {
     const map = new Map<string, number>();
-    rawLines.forEach((row: any[]) => {
+    rawLines.forEach((row) => {
       const name = safeText(row[3] || '');
       if (!name || name === '--- TOTAL TICKET ---') return;
       const cat = safeText(row[4] || '');
