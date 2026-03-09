@@ -1,5 +1,6 @@
 import { OmniSettings } from '../types';
 import { apiFetch } from './apiFetch';
+import { safeNum } from '../lib/utils';
 
 interface SheetMetadata {
   properties?: { title?: string };
@@ -126,6 +127,54 @@ export class ConfigService {
             ]
           })
         });
+      }
+
+      // Migration 3: Fix precio_total_linea to always be net (precio_unitario * cantidad - descuento)
+      const settingsKeysResponse = await apiFetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Settings!A:A`,
+        { headers: { Authorization: `Bearer ${this.accessToken}` } }
+      );
+      const settingsKeysData = await settingsKeysResponse.json();
+      const settingsKeys: string[] = (settingsKeysData.values || []).map((r: string[]) => r[0] ?? '');
+      if (!settingsKeys.includes('MIGRATION_DISCOUNT_FIX')) {
+        const gastosResponse = await apiFetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A2:J10000`,
+          { headers: { Authorization: `Bearer ${this.accessToken}` } }
+        );
+        const gastosData = await gastosResponse.json();
+        const rows: string[][] = gastosData.values || [];
+
+        const updates: { range: string; values: [[number]] }[] = [];
+        rows.forEach((row, idx) => {
+          // Skip totals rows
+          if ((row[3] ?? '') === '--- TOTAL TICKET ---') return;
+          const cantidad = safeNum(row[5]);
+          const precioUnitario = safeNum(row[6]);
+          const descuento = safeNum(row[7]);
+          const currentTotal = safeNum(row[8]);
+          const correct = precioUnitario * cantidad - descuento;
+          if (Math.abs(correct - currentTotal) > 0.001) {
+            updates.push({ range: `Gastos!I${idx + 2}`, values: [[correct]] });
+          }
+        });
+
+        if (updates.length > 0) {
+          await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ valueInputOption: 'RAW', data: updates })
+          });
+        }
+
+        // Mark migration as done
+        await apiFetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Settings!A:B/append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values: [['MIGRATION_DISCOUNT_FIX', new Date().toISOString()]] })
+          }
+        );
       }
 
       // Migration 2: Add "Producto Normalizado" header to Gastos!J1

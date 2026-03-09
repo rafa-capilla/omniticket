@@ -183,6 +183,11 @@ export class SyncEngine {
       throw new Error("Datos de IA inválidos");
     }
 
+    // Post-process: garantizar que precio_total_linea sea siempre neto
+    for (const item of ticketData.items) {
+      item.precio_total_linea = (item.precio_unitario * item.cantidad) - item.descuento;
+    }
+
     // Post-process: apply user rules (highest priority)
     const activeCategoryNames = new Set(categoriesToUse.map(c => c.name));
     ticketData.items.forEach(item => {
