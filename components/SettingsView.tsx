@@ -27,8 +27,11 @@ export const SettingsView: React.FC<Props> = ({ onLogout }) => {
         GEMINI_API_KEY: s.GEMINI_API_KEY,
       });
       setLoaded(true);
-    }).catch(console.error);
-  }, [token, dbId]);
+    }).catch((err: unknown) => {
+      console.error('[SettingsView] getSettings failed:', err);
+      toast.error('Error al cargar la configuración: ' + (err instanceof Error ? err.message : String(err)));
+    });
+  }, [token, dbId, toast]);
 
   const handleSave = async () => {
     setIsSaving(true);

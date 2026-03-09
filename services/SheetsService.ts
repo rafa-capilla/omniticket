@@ -1,5 +1,6 @@
 
-import { TicketData, Rule, Category } from '../types';
+import { TicketData, Rule, Category, SheetsValuesResponse, SheetsMetadataResponse } from '../types';
+import { TOTAL_TICKET_MARKER } from '../lib/constants';
 import { apiFetch } from './apiFetch';
 
 export class SheetsService {
@@ -15,7 +16,7 @@ export class SheetsService {
       item.nombre_normalizado ?? ''
     ]);
     const totalRow = [
-      data.id, data.tienda, data.fecha, '--- TOTAL TICKET ---', 'TOTAL', '', '', '', data.total_ticket, ''
+      data.id, data.tienda, data.fecha, TOTAL_TICKET_MARKER, 'TOTAL', '', '', '', data.total_ticket, ''
     ];
     const values = [...itemRows, totalRow];
     await apiFetch(
@@ -33,8 +34,8 @@ export class SheetsService {
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A2:J10000`,
       { headers: { Authorization: `Bearer ${this.accessToken}` } }
     );
-    const data = await response.json();
-    return data.values || [];
+    const data: SheetsValuesResponse = await response.json();
+    return data.values ?? [];
   }
 
   // ─── CATEGORIES ───────────────────────────────────────────────────────────
@@ -45,13 +46,14 @@ export class SheetsService {
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Categories!A2:C1000`,
         { headers: { Authorization: `Bearer ${this.accessToken}` } }
       );
-      const data = await response.json();
-      return (data.values || []).map((row: string[]) => ({
+      const data: SheetsValuesResponse = await response.json();
+      return (data.values ?? []).map((row: string[]) => ({
         name: String(row[0] || ''),
         description: String(row[1] || ''),
         status: String(row[2] || '').toLowerCase() === 'inactive' ? 'inactive' as const : 'active' as const,
       })).filter((c: Category) => c.name);
-    } catch {
+    } catch (err) {
+      console.error('[SheetsService] getCategories failed:', err);
       return [];
     }
   }
@@ -136,13 +138,14 @@ export class SheetsService {
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Rules!A2:C1000`,
         { headers: { Authorization: `Bearer ${this.accessToken}` } }
       );
-      const data = await response.json();
-      return (data.values || []).map((row: string[]) => ({
+      const data: SheetsValuesResponse = await response.json();
+      return (data.values ?? []).map((row: string[]) => ({
         pattern: row[0] || '',
         normalized: row[1] || '',
         category: row[2] || 'Otros'
       }));
-    } catch {
+    } catch (err) {
+      console.error('[SheetsService] getRules failed:', err);
       return [];
     }
   }
@@ -202,10 +205,11 @@ export class SheetsService {
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`,
         { headers: { Authorization: `Bearer ${this.accessToken}` } }
       );
-      const data = await response.json();
-      const sheet = (data.sheets || []).find((s: { properties?: { title?: string; sheetId?: number } }) => s.properties?.title === sheetName);
+      const data: SheetsMetadataResponse = await response.json();
+      const sheet = (data.sheets ?? []).find(s => s.properties?.title === sheetName);
       return sheet?.properties?.sheetId ?? null;
-    } catch {
+    } catch (err) {
+      console.error(`[SheetsService] getSheetNumericId('${sheetName}') failed:`, err);
       return null;
     }
   }

@@ -5,6 +5,7 @@ import { AIAnalysisService } from '../services/AIAnalysisService';
 import { ConfigService } from '../services/ConfigService';
 import { useApp } from '../contexts/AppContext';
 import { safeText, safeNum, COLORS } from '../lib/utils';
+import { TOTAL_TICKET_MARKER } from '../lib/constants';
 
 interface Props {
   rawLines: string[][];
@@ -37,7 +38,7 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
       const date = row[2] ?? '';
       if (date < dateRange.start || date > dateRange.end) return;
 
-      if (row[3] === '--- TOTAL TICKET ---') {
+      if (row[3] === TOTAL_TICKET_MARKER) {
         totalSpent += safeNum(row[8]);
         ticketCount++;
       } else {
