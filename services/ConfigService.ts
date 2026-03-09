@@ -167,7 +167,7 @@ export class ConfigService {
 
         // Mark migration as done
         await apiFetch(
-          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Settings!A:B/append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Settings!A:B:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
           {
             method: 'POST',
             headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
