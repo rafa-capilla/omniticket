@@ -41,7 +41,6 @@ export class SyncEngine {
 
     if (threadIds.length === 0) {
       onProgress?.("Todo al día. No hay tickets pendientes.");
-      await new Promise(r => setTimeout(r, 1500));
       await this.config.updateLastSync();
       return [];
     }
@@ -179,8 +178,9 @@ export class SyncEngine {
       rawJson.id = uuid; // always use our UUID
       ticketData = ticketSchema.parse(rawJson);
     } catch (e) {
-      console.error("Fallo al parsear JSON de Gemini:", response.text);
-      throw new Error("Datos de IA inválidos");
+      console.error("Fallo al parsear JSON de Gemini:", response.text, e);
+      const detail = e instanceof Error ? e.message : String(e);
+      throw new Error(`Datos de IA inválidos: ${detail}`);
     }
 
     // Post-process: apply user rules (highest priority)
