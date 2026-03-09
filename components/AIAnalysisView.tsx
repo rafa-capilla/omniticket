@@ -49,8 +49,8 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
         catMap.set(cat, (catMap.get(cat) ?? 0) + amount);
         if (prod) prodMap.set(prod, (prodMap.get(prod) ?? 0) + amount);
         if (store) storeMap.set(store, (storeMap.get(store) ?? 0) + amount);
-        const cant = row[6] ?? '';
-        const pUnit = safeNum(row[5]);
+        const cant = row[5] ?? '';       // F = Cantidad
+        const pUnit = safeNum(row[6]);   // G = Precio Unitario
         lineItems.push(`${date}|${store}|${prod}|${cat}|${cant}|${pUnit.toFixed(2)}€|${amount.toFixed(2)}€`);
       }
     });
