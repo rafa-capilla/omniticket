@@ -31,7 +31,7 @@ export const RulesView: React.FC<Props> = ({ rules, categories }) => {
     try {
       await sheets.addRule(dbId, newRule);
       setNewRule({ pattern: '', normalized: '', category: defaultCategory });
-      loadData();
+      await loadData();
     } catch (err: unknown) {
       toast.error('Error al guardar regla: ' + (err instanceof Error ? err.message : String(err)));
     }
@@ -41,7 +41,7 @@ export const RulesView: React.FC<Props> = ({ rules, categories }) => {
     if (!confirm(`¿Eliminar regla "${pattern}"?`)) return;
     try {
       await sheets.deleteRule(dbId, rowIndex);
-      loadData();
+      await loadData();
     } catch (err: unknown) {
       toast.error('Error al eliminar regla: ' + (err instanceof Error ? err.message : String(err)));
     }
@@ -52,7 +52,7 @@ export const RulesView: React.FC<Props> = ({ rules, categories }) => {
     try {
       await sheets.updateRule(dbId, editingIndex + 2, editForm); // +2: header + 0-indexed
       setEditingIndex(null);
-      loadData();
+      await loadData();
     } catch (err: unknown) {
       toast.error('Error al actualizar regla: ' + (err instanceof Error ? err.message : String(err)));
     }
