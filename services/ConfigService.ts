@@ -200,7 +200,7 @@ export class ConfigService {
 
   async getSettings(forcedId?: string): Promise<OmniSettings> {
     const id = forcedId || await this.getOrFindId();
-    const response = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Settings!A1:B5`, {
+    const response = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Settings!A:B`, {
       headers: { Authorization: `Bearer ${this.accessToken}` }
     });
     const data = await response.json();
