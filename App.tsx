@@ -5,6 +5,7 @@ import { ConfigService } from './services/ConfigService';
 import { SheetsService } from './services/SheetsService';
 import { HistoryTicket, LensType, Rule, Category, ViewState } from './types';
 import { safeText, safeNum } from './lib/utils';
+import { TOTAL_TICKET_MARKER } from './lib/constants';
 import { AppContext } from './contexts/AppContext';
 import { ToastItem, ToastList } from './components/ToastList';
 import { HistoryView } from './components/HistoryView';
@@ -137,7 +138,7 @@ const App: React.FC = () => {
         const fecha = safeText(row[2]);
         const producto = safeText(row[3]);
         const total = safeNum(row[8]);
-        if (producto === '--- TOTAL TICKET ---') {
+        if (producto === TOTAL_TICKET_MARKER) {
           historyMap.set(id, { id, tienda, fecha, total });
         } else if (!historyMap.has(id)) {
           historyMap.set(id, { id, tienda, fecha, total: 0 });
@@ -184,7 +185,7 @@ const App: React.FC = () => {
     const map = new Map<string, number>();
     rawLines.forEach((row) => {
       const name = safeText(row[3] || '');
-      if (!name || name === '--- TOTAL TICKET ---') return;
+      if (!name || name === TOTAL_TICKET_MARKER) return;
       const cat = safeText(row[4] || '');
       if (cat) map.set(cat, (map.get(cat) || 0) + 1);
     });

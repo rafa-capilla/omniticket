@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
 import { Rule, Category, DashboardStats, LensType } from '../types';
 import { AIAnalysisView } from './AIAnalysisView';
 import { safeText, safeNum, COLORS } from '../lib/utils';
+import { TOTAL_TICKET_MARKER } from '../lib/constants';
 
 interface Props {
   currentLens: LensType;
@@ -34,7 +35,7 @@ export const LensesView: React.FC<Props> = ({
       })
       .map((row: string[]) => {
         const originalName = safeText(row[3] ?? '');
-        if (originalName === '--- TOTAL TICKET ---' || !originalName) return row;
+        if (originalName === TOTAL_TICKET_MARKER || !originalName) return row;
 
         const matchedRule = rules.find(r =>
           r.pattern && originalName.toLowerCase().includes(safeText(r.pattern).toLowerCase())
@@ -61,7 +62,7 @@ export const LensesView: React.FC<Props> = ({
     const catMap = new Map<string, number>();
 
     processedData.forEach((row: string[]) => {
-      if (row[3] === '--- TOTAL TICKET ---') {
+      if (row[3] === TOTAL_TICKET_MARKER) {
         total += safeNum(row[8]);
         count++;
       } else {
@@ -81,7 +82,7 @@ export const LensesView: React.FC<Props> = ({
     if (currentLens === 'categories') {
       const agg = new Map<string, number>(activeCategories.map(c => [c.name, 0]));
       processedData.forEach((row: string[]) => {
-        if (row[3] === '--- TOTAL TICKET ---' || !row[3]) return;
+        if (row[3] === TOTAL_TICKET_MARKER || !row[3]) return;
         const key = safeText(row[4]);
         agg.set(key, (agg.get(key) ?? 0) + safeNum(row[8]));
       });
@@ -93,7 +94,7 @@ export const LensesView: React.FC<Props> = ({
       let key = '';
       if (currentLens === 'products') key = safeText(row[3]);
       else if (currentLens === 'stores') key = safeText(row[1]);
-      if (safeText(row[3]) === '--- TOTAL TICKET ---' || !key) return;
+      if (safeText(row[3]) === TOTAL_TICKET_MARKER || !key) return;
       agg.set(key, (agg.get(key) ?? 0) + safeNum(row[8]));
     });
     return Array.from(agg.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);

@@ -1,5 +1,5 @@
 /** Marker used in the "Producto" column (D) to identify the total-row of a ticket. */
-export const TOTAL_TICKET_MARKER = '--- TOTAL TICKET ---';
+export const TOTAL_TICKET_MARKER = '--- TOTAL TICKET ---' as const;
 
 /**
  * Default category names used as fallback when no user-defined categories are
@@ -14,3 +14,5 @@ export const DEFAULT_CATEGORY_NAMES = [
   'Higiene',
   'Otros',
 ] as const;
+
+export type DefaultCategoryName = (typeof DEFAULT_CATEGORY_NAMES)[number];
