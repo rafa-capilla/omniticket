@@ -55,7 +55,6 @@ export class ConfigService {
           { properties: { title: 'Settings' } },
           { properties: { title: 'Gastos', gridProperties: { frozenRowCount: 1 } } },
           { properties: { title: 'Rules', gridProperties: { frozenRowCount: 1 } } },
-          { properties: { title: 'Mapping_Cache' } }
         ]
       };
       const response = await apiFetch('https://sheets.googleapis.com/v4/spreadsheets', {
