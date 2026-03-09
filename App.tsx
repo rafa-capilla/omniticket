@@ -125,8 +125,8 @@ const App: React.FC = () => {
         sheets.getCategories(dbId),
       ]);
       setRawLines(lines);
-      setRules(r as Rule[]);
-      setCategories(cats as Category[]);
+      setRules(r);
+      setCategories(cats);
 
       // Derive history from raw lines (same logic as SheetsService.fetchHistory)
       const historyMap = new Map<string, HistoryTicket>();
