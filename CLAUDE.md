@@ -27,3 +27,6 @@ Estos archivos contienen toda la documentación necesaria para trabajar efectiva
 - Verificar compatibilidad con el código existente antes de usar la versión nueva
 - Para GitHub Actions: consultar el marketplace o el repositorio de la action para la última versión
 - Para npm: usar `npm info <paquete> version` o consultar npmjs.com para la versión actual
+
+## Preferencias de Commits
+- No añadir línea `Co-Authored-By` en los mensajes de commit
