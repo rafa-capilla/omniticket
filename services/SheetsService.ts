@@ -31,7 +31,7 @@ export class SheetsService {
 
   async fetchAllLineItems(spreadsheetId: string): Promise<string[][]> {
     const response = await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A2:J10000`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A2:J`,
       { headers: { Authorization: `Bearer ${this.accessToken}` } }
     );
     const data: SheetsValuesResponse = await response.json();
