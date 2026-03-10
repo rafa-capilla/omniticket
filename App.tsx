@@ -102,9 +102,12 @@ const App: React.FC = () => {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg === '401') handleLogout();
-      else setProgressMsg('Error: ' + msg);
+      else {
+        toast.error('Error al inicializar: ' + msg);
+        setAppState('LOGIN');
+      }
     }
-  }, [handleLogout]);
+  }, [handleLogout, toast]);
 
   useEffect(() => {
     if (!token) { setAppState('LOGIN'); return; }

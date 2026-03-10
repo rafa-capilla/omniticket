@@ -134,7 +134,7 @@ export class ConfigService {
       const settingsKeys: string[] = (settingsKeysData.values ?? []).map((r: string[]) => r[0] ?? '');
       if (!settingsKeys.includes('MIGRATION_DISCOUNT_FIX')) {
         const gastosResponse = await apiFetch(
-          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A2:J10000`,
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A2:J`,
           { headers: { Authorization: `Bearer ${this.accessToken}` } }
         );
         const gastosData: SheetsValuesResponse = await gastosResponse.json();
