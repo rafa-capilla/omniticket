@@ -168,8 +168,11 @@ jobs:
           echo "cache_read=$CACHE_READ" >> $GITHUB_OUTPUT
 
           IS_RATE_LIMITED=false
-          if echo "$RESULT$RAW_OUTPUT" | grep -qi "rate limit\|429\|too many requests"; then
-            IS_RATE_LIMITED=true
+          if [ "$IS_ERROR" = "true" ]; then
+            CANARY=$(claude -p "ok" --max-turns 1 --output-format json 2>/dev/null || echo '{"is_error":true}')
+            if echo "$CANARY" | grep -qi "rate limit\|429\|too many requests"; then
+              IS_RATE_LIMITED=true
+            fi
           fi
 
           if [ "$IS_ERROR" = "true" ] && [ "$IS_RATE_LIMITED" = "false" ]; then
@@ -181,7 +184,7 @@ jobs:
 
           if [ "$IS_RATE_LIMITED" = "true" ]; then
             echo "rate_limited=true" >> $GITHUB_OUTPUT
-            echo "::warning::Pass 1 hit rate limit — pass 2 will be skipped"
+            echo "::warning::Pass 1 hit rate limit — skipping TS check and PR"
           else
             echo "rate_limited=false" >> $GITHUB_OUTPUT
           fi
@@ -192,25 +195,47 @@ jobs:
           echo "### Summary of changes — Pass 1" >> $GITHUB_STEP_SUMMARY
           cat /tmp/claude-summary-pass1.md >> $GITHUB_STEP_SUMMARY
 
-      - name: Save diff artifact
-        if: steps.run.outputs.rate_limited != 'true'
-        run: git diff > /tmp/pass1.diff
-
-      - uses: actions/upload-artifact@v4
-        if: steps.run.outputs.rate_limited != 'true'
-        with:
-          name: diff-pass1
-          path: /tmp/pass1.diff
-          retention-days: 1
-
-      - name: Check TypeScript
+      - name: Fix TypeScript errors
         id: tsc
         if: steps.run.outputs.rate_limited != 'true'
-        run: docker compose run --rm omniticket sh -c "npm ci && npx tsc --noEmit"
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          MAX_FIX_ATTEMPTS=5
+          FIX_ATTEMPT=0
+          TSC_OK=false
+
+          while [ $FIX_ATTEMPT -le $MAX_FIX_ATTEMPTS ]; do
+            TSC_OUTPUT=$(docker compose run --rm omniticket sh -c "npm ci && npx tsc --noEmit" 2>&1)
+            TSC_EXIT=$?
+
+            if [ $TSC_EXIT -eq 0 ]; then
+              TSC_OK=true
+              echo "TypeScript OK after $FIX_ATTEMPT fix attempt(s)"
+              break
+            fi
+
+            FIX_ATTEMPT=$((FIX_ATTEMPT + 1))
+
+            if [ $FIX_ATTEMPT -le $MAX_FIX_ATTEMPTS ]; then
+              echo "TypeScript errors (attempt $FIX_ATTEMPT / $MAX_FIX_ATTEMPTS), asking Claude to fix..."
+              TSC_FIX_PROMPT=$(printf 'Fix ONLY the following TypeScript compilation errors. Do not refactor or change anything else.\n\nTypeScript errors:\n%s' "$TSC_OUTPUT")
+              claude -p "$TSC_FIX_PROMPT" \
+                --dangerously-skip-permissions \
+                --max-turns 20 \
+                --output-format json > /tmp/claude-fix-${FIX_ATTEMPT}.json 2>&1 || true
+            fi
+          done
+
+          if [ "$TSC_OK" = "true" ]; then
+            echo "outcome=success" >> $GITHUB_OUTPUT
+          else
+            echo "outcome=failure" >> $GITHUB_OUTPUT
+          fi
         continue-on-error: true
 
       - name: Set PR title for pass 1
-        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'success'
+        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outputs.outcome == 'success'
         id: pr_title
         run: |
           DAY="${{ needs.check.outputs.day }}"
@@ -221,7 +246,7 @@ jobs:
           fi
 
       - name: Build PR body pass 1
-        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'success'
+        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outputs.outcome == 'success'
         run: |
           DAY="${{ needs.check.outputs.day }}"
           {
@@ -238,7 +263,7 @@ jobs:
           } > /tmp/pr-body-pass1.md
 
       - name: Create Pull Request
-        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'success'
+        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outputs.outcome == 'success'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -248,163 +273,18 @@ jobs:
           commit-message: "🤖 auto-improve: ${{ needs.check.outputs.day }}, pass 1"
           labels: "auto-improve,needs-review"
 
-      - name: Revert if TypeScript failed
-        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'failure'
-        run: |
-          git checkout .
-          git clean -fd
-          echo "::warning::Pass 1 — TypeScript check failed. No PR was created."
-
-  pass-2:
-    needs: [check, pass-1]
-    if: |
-      needs.check.outputs.should_run == 'true' &&
-      needs.check.outputs.focused != 'true' &&
-      needs.pass-1.outputs.rate_limited != 'true'
-    runs-on: ubuntu-latest
-    outputs:
-      rate_limited: ${{ steps.run.outputs.rate_limited }}
-      input_tokens: ${{ steps.run.outputs.input_tokens }}
-      output_tokens: ${{ steps.run.outputs.output_tokens }}
-      cache_read: ${{ steps.run.outputs.cache_read }}
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: diff-pass1
-          path: /tmp
-
-      - name: Install Claude Code
-        run: |
-          curl -fsSL https://claude.ai/install.sh | bash
-          echo "$HOME/.claude/bin" >> $GITHUB_PATH
-
-      - name: Run pass 2
-        id: run
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          PREV_DIFF=$(cat /tmp/pass1.diff 2>/dev/null || echo "(no diff)")
-
-          claude -p "
-          Read CLAUDE.md before making any changes.
-
-          The previous pass already made these changes (git diff):
-          ---
-          $PREV_DIFF
-          ---
-
-          Find the next highest-value improvements in areas not already modified by the previous pass.
-          You can touch any area: TypeScript types, business logic, performance, tests, documentation,
-          processing rules, component architecture, security — whatever you judge most valuable.
-          No limit on the number of files you can modify.
-
-          RULES:
-          - Do not rename public functions/classes/methods
-          - Do not change function signatures
-          - Do not delete code without verifying it is unreferenced
-          - If there is nothing clear to improve, do not force changes
-
-          When done, generate a Markdown summary of the changes:
-          - File modified
-          - What was changed and why
-          " \
-          --dangerously-skip-permissions \
-          --max-turns 40 \
-          --output-format json > /tmp/claude-output.json 2>&1 || true
-
-          if ! jq empty /tmp/claude-output.json 2>/dev/null; then
-            echo "::error::Pass 2 — Claude output is not valid JSON. Raw output:"
-            head -100 /tmp/claude-output.json
-            echo "rate_limited=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          IS_ERROR=$(jq -r '.is_error // false' /tmp/claude-output.json 2>/dev/null)
-          RESULT=$(jq -r '.result // ""' /tmp/claude-output.json 2>/dev/null)
-          RAW_OUTPUT=$(cat /tmp/claude-output.json 2>/dev/null)
-
-          INPUT_TOKENS=$(jq -r '.usage.input_tokens // 0' /tmp/claude-output.json)
-          OUTPUT_TOKENS=$(jq -r '.usage.output_tokens // 0' /tmp/claude-output.json)
-          CACHE_READ=$(jq -r '.usage.cache_read_input_tokens // 0' /tmp/claude-output.json)
-
-          echo "### Token usage — Pass 2" >> $GITHUB_STEP_SUMMARY
-          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Input tokens | $INPUT_TOKENS |" >> $GITHUB_STEP_SUMMARY
-          echo "| Output tokens | $OUTPUT_TOKENS |" >> $GITHUB_STEP_SUMMARY
-          echo "| Cache read | $CACHE_READ |" >> $GITHUB_STEP_SUMMARY
-
-          echo "input_tokens=$INPUT_TOKENS" >> $GITHUB_OUTPUT
-          echo "output_tokens=$OUTPUT_TOKENS" >> $GITHUB_OUTPUT
-          echo "cache_read=$CACHE_READ" >> $GITHUB_OUTPUT
-
-          IS_RATE_LIMITED=false
-          if echo "$RESULT$RAW_OUTPUT" | grep -qi "rate limit\|429\|too many requests"; then
-            IS_RATE_LIMITED=true
-          fi
-
-          if [ "$IS_ERROR" = "true" ] && [ "$IS_RATE_LIMITED" = "false" ]; then
-            echo "::error::Pass 2 failed with a non-rate-limit error. Raw output:"
-            echo "$RAW_OUTPUT" | head -100
-            echo "rate_limited=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          if [ "$IS_RATE_LIMITED" = "true" ]; then
-            echo "rate_limited=true" >> $GITHUB_OUTPUT
-            echo "::warning::Pass 2 hit rate limit"
-          else
-            echo "rate_limited=false" >> $GITHUB_OUTPUT
-          fi
-
-          echo "$RESULT" > /tmp/claude-summary-pass2.md
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Summary of changes — Pass 2" >> $GITHUB_STEP_SUMMARY
-          cat /tmp/claude-summary-pass2.md >> $GITHUB_STEP_SUMMARY
-
-      - name: Check TypeScript
-        id: tsc
-        if: steps.run.outputs.rate_limited != 'true'
-        run: docker compose run --rm omniticket sh -c "npm ci && npx tsc --noEmit"
-        continue-on-error: true
-
-      - name: Build PR body pass 2
-        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'success'
-        run: |
-          DAY="${{ needs.check.outputs.day }}"
-          {
-            echo "## Automatic improvements — pass 2 · $DAY"
-            echo ""
-            echo "### Summary of changes"
-            cat /tmp/claude-summary-pass2.md
-            echo ""
-            echo "### Token usage"
-            echo "- Input: ${{ steps.run.outputs.input_tokens }} | Output: ${{ steps.run.outputs.output_tokens }} | Cache read: ${{ steps.run.outputs.cache_read }}"
-            echo ""
-            echo "---"
-            echo "⚠️ **Review before merging.**"
-          } > /tmp/pr-body-pass2.md
-
-      - name: Create Pull Request
-        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'success'
+      - name: Create draft PR (TypeScript still failing)
+        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outputs.outcome == 'failure'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: auto-improve-${{ needs.check.outputs.day }}-pass2-${{ github.run_number }}
-          title: "🤖 Auto-improve pass 2 — ${{ needs.check.outputs.day }}"
-          body-path: /tmp/pr-body-pass2.md
-          commit-message: "🤖 auto-improve: ${{ needs.check.outputs.day }}, pass 2"
-          labels: "auto-improve,needs-review"
+          branch: auto-improve-${{ needs.check.outputs.day }}-pass1-${{ github.run_number }}
+          title: "🤖 [WIP] Auto-improve pass 1 — ${{ needs.check.outputs.day }} (TS errors)"
+          body: |
+            ## ⚠️ TypeScript errors — needs manual fix
 
-      - name: Revert if TypeScript failed
-        if: steps.run.outputs.rate_limited != 'true' && steps.tsc.outcome == 'failure'
-        run: |
-          git checkout .
-          git clean -fd
-          echo "::warning::Pass 2 — TypeScript check failed. No PR was created."
+            Changes were made but TypeScript compilation still fails after 5 fix attempts.
+            This PR is a draft to preserve the work — review and fix TS errors before merging.
+          draft: true
+          labels: "auto-improve,needs-ts-fix"
+          commit-message: "🤖 auto-improve (wip): ${{ needs.check.outputs.day }}, pass 1"
