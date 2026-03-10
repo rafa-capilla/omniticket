@@ -5,9 +5,9 @@ export const ticketItemSchema = z.object({
   nombre: z.string().min(1, "Nombre de producto requerido"),
   nombre_normalizado: z.string().default(""),
   categoria: z.string().default("Otros"),
-  precio_unitario: z.number().default(0),
-  cantidad: z.number().default(1),
-  descuento: z.number().default(0),
+  precio_unitario: z.number().min(0, "Precio unitario no puede ser negativo").default(0),
+  cantidad: z.number().min(0, "Cantidad no puede ser negativa").default(1),
+  descuento: z.number().min(0, "Descuento no puede ser negativo").default(0),
   precio_total_linea: z.number().default(0),
 });
 

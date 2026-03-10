@@ -5,6 +5,7 @@ import { AIAnalysisService } from '../services/AIAnalysisService';
 import { ConfigService } from '../services/ConfigService';
 import { useApp } from '../contexts/AppContext';
 import { safeText, safeNum, COLORS } from '../lib/utils';
+import { TOTAL_TICKET_MARKER } from '../lib/constants';
 
 interface Props {
   rawLines: string[][];
@@ -37,7 +38,7 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
       const date = row[2] ?? '';
       if (date < dateRange.start || date > dateRange.end) return;
 
-      if (row[3] === '--- TOTAL TICKET ---') {
+      if (row[3] === TOTAL_TICKET_MARKER) {
         totalSpent += safeNum(row[8]);
         ticketCount++;
       } else {
@@ -48,8 +49,8 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
         catMap.set(cat, (catMap.get(cat) ?? 0) + amount);
         if (prod) prodMap.set(prod, (prodMap.get(prod) ?? 0) + amount);
         if (store) storeMap.set(store, (storeMap.get(store) ?? 0) + amount);
-        const cant = row[6] ?? '';
-        const pUnit = safeNum(row[5]);
+        const cant = row[5] ?? '';       // F = Cantidad
+        const pUnit = safeNum(row[6]);   // G = Precio Unitario
         lineItems.push(`${date}|${store}|${prod}|${cat}|${cant}|${pUnit.toFixed(2)}€|${amount.toFixed(2)}€`);
       }
     });

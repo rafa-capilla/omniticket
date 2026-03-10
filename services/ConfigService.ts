@@ -1,10 +1,7 @@
-import { OmniSettings } from '../types';
+import { OmniSettings, SheetsValuesResponse, SheetsMetadataResponse, DriveFilesResponse } from '../types';
+import { TOTAL_TICKET_MARKER } from '../lib/constants';
 import { apiFetch } from './apiFetch';
 import { safeNum } from '../lib/utils';
-
-interface SheetMetadata {
-  properties?: { title?: string };
-}
 
 const DEFAULT_CATEGORIES = [
   ['Lácteos', 'Leche, yogures, quesos, mantequilla, nata', 'active'],
@@ -32,7 +29,7 @@ export class ConfigService {
     const response = await apiFetch(`https://www.googleapis.com/drive/v3/files?q=${q}`, {
       headers: { Authorization: `Bearer ${this.accessToken}` }
     });
-    const data = await response.json();
+    const data: DriveFilesResponse = await response.json();
     const fileId = data.files?.[0]?.id;
     if (!fileId) throw new Error("NOT_FOUND");
     this.spreadsheetId = String(fileId);
@@ -102,8 +99,8 @@ export class ConfigService {
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`,
         { headers: { Authorization: `Bearer ${this.accessToken}` } }
       );
-      const meta = await metaResponse.json();
-      const sheetTitles: string[] = (meta.sheets || []).map((s: SheetMetadata) => String(s.properties?.title || ''));
+      const meta: SheetsMetadataResponse = await metaResponse.json();
+      const sheetTitles: string[] = (meta.sheets ?? []).map(s => String(s.properties?.title ?? ''));
 
       // Migration 1: Create Categories sheet
       if (!sheetTitles.includes('Categories')) {
@@ -133,20 +130,20 @@ export class ConfigService {
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Settings!A:A`,
         { headers: { Authorization: `Bearer ${this.accessToken}` } }
       );
-      const settingsKeysData = await settingsKeysResponse.json();
-      const settingsKeys: string[] = (settingsKeysData.values || []).map((r: string[]) => r[0] ?? '');
+      const settingsKeysData: SheetsValuesResponse = await settingsKeysResponse.json();
+      const settingsKeys: string[] = (settingsKeysData.values ?? []).map((r: string[]) => r[0] ?? '');
       if (!settingsKeys.includes('MIGRATION_DISCOUNT_FIX')) {
         const gastosResponse = await apiFetch(
           `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A2:J10000`,
           { headers: { Authorization: `Bearer ${this.accessToken}` } }
         );
-        const gastosData = await gastosResponse.json();
-        const rows: string[][] = gastosData.values || [];
+        const gastosData: SheetsValuesResponse = await gastosResponse.json();
+        const rows: string[][] = gastosData.values ?? [];
 
         const updates: { range: string; values: [[number]] }[] = [];
         rows.forEach((row, idx) => {
           // Skip totals rows
-          if ((row[3] ?? '') === '--- TOTAL TICKET ---') return;
+          if ((row[3] ?? '') === TOTAL_TICKET_MARKER) return;
           const cantidad = safeNum(row[5]);
           const precioUnitario = safeNum(row[6]);
           const descuento = safeNum(row[7]);
@@ -181,7 +178,7 @@ export class ConfigService {
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!J1`,
         { headers: { Authorization: `Bearer ${this.accessToken}` } }
       );
-      const headerData = await headerResponse.json();
+      const headerData: SheetsValuesResponse = await headerResponse.json();
       if (!headerData.values || !headerData.values[0]?.[0]) {
         await apiFetch(
           `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!J1?valueInputOption=RAW`,
@@ -200,11 +197,11 @@ export class ConfigService {
 
   async getSettings(forcedId?: string): Promise<OmniSettings> {
     const id = forcedId || await this.getOrFindId();
-    const response = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Settings!A1:B5`, {
+    const response = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Settings!A:B`, {
       headers: { Authorization: `Bearer ${this.accessToken}` }
     });
-    const data = await response.json();
-    const rows = data.values || [];
+    const data: SheetsValuesResponse = await response.json();
+    const rows = data.values ?? [];
     const settings: OmniSettings = { GMAIL_SEARCH_LABEL: 'OmniTicket', GMAIL_PROCESSED_LABEL: 'OmniTicket/Procesado', GEMINI_API_KEY: '', LAST_SYNC: 'Nunca' };
 
     rows.forEach((row: string[]) => {

@@ -16,6 +16,30 @@ interface GmailPayload {
   parts?: GmailPayload[];
 }
 
+interface GmailMessage {
+  payload?: GmailPayload;
+}
+
+/** Gmail threads.list */
+interface GmailThreadsResponse {
+  threads?: GmailThread[];
+}
+
+/** Gmail threads.get */
+interface GmailThreadResponse {
+  messages?: GmailMessage[];
+}
+
+/** Gmail labels.list */
+interface GmailLabelsResponse {
+  labels?: GmailLabel[];
+}
+
+/** Gmail labels.create */
+interface GmailLabelResponse {
+  id: string;
+}
+
 /**
  * Extrae texto de un payload de Gmail de forma recursiva.
  * Prioriza text/plain > text/html > recursión en sub-partes multipart.
@@ -60,8 +84,8 @@ export class GmailService {
       `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(query)}`,
       { headers: { Authorization: `Bearer ${this.accessToken}` } }
     );
-    const data = await response.json();
-    return (data.threads || []).map((t: GmailThread) => t.id);
+    const data: GmailThreadsResponse = await response.json();
+    return (data.threads ?? []).map(t => t.id);
   }
 
   async getThreadContent(threadId: string): Promise<string> {
@@ -69,12 +93,12 @@ export class GmailService {
       `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`,
       { headers: { Authorization: `Bearer ${this.accessToken}` } }
     );
-    const data = await response.json();
+    const data: GmailThreadResponse = await response.json();
 
     // Concatenar el texto de todos los mensajes del thread
     let fullText = '';
-    for (const msg of (data.messages || [])) {
-      const text = extractTextFromPayload(msg.payload || {});
+    for (const msg of (data.messages ?? [])) {
+      const text = extractTextFromPayload(msg.payload ?? {});
       if (text) fullText += text + '\n';
     }
 
@@ -103,8 +127,8 @@ export class GmailService {
       'https://gmail.googleapis.com/gmail/v1/users/me/labels',
       { headers: { Authorization: `Bearer ${this.accessToken}` } }
     );
-    const data = await response.json();
-    const existing = (data.labels as GmailLabel[]).find(l => l.name === name);
+    const data: GmailLabelsResponse = await response.json();
+    const existing = (data.labels ?? []).find(l => l.name === name);
     if (existing) {
       this.labelCache.set(name, existing.id);
       return existing.id;
@@ -121,7 +145,7 @@ export class GmailService {
         body: JSON.stringify({ name, labelListVisibility: 'labelShow', messageListVisibility: 'show' })
       }
     );
-    const created = await createResponse.json();
+    const created: GmailLabelResponse = await createResponse.json();
     this.labelCache.set(name, created.id);
     return created.id;
   }

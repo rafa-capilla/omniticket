@@ -6,6 +6,7 @@ import { ConfigService } from "./ConfigService";
 import { ticketSchema } from "../schemas/ticketSchema";
 import { withRetry } from "./retry";
 import { SyncResult, OmniSettings, Category, Rule } from "../types";
+import { DEFAULT_CATEGORY_NAMES } from "../lib/constants";
 
 /**
  * Motor de sincronización principal de OmniTicket.
@@ -111,10 +112,9 @@ export class SyncEngine {
     }
 
     const activeCategories = categories.filter(c => c.status === 'active');
-    const fallbackCategories = ['Lácteos', 'Carne', 'Fruta/Verdura', 'Limpieza', 'Bebidas', 'Higiene', 'Otros'];
     const categoriesToUse = activeCategories.length > 0
       ? activeCategories
-      : fallbackCategories.map(name => ({ name, description: '', status: 'active' as const }));
+      : DEFAULT_CATEGORY_NAMES.map(name => ({ name, description: '', status: 'active' as const }));
 
     const categoryList = categoriesToUse
       .map(c => c.description ? `- ${c.name}: ${c.description}` : `- ${c.name}`)
