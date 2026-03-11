@@ -137,6 +137,7 @@ jobs:
           fi
 
           claude -p "$PROMPT" \
+          --model claude-opus-4-6 \
           --dangerously-skip-permissions \
           --max-turns 60 \
           --output-format json > /tmp/claude-output.json 2>&1 || true
@@ -221,6 +222,7 @@ jobs:
               echo "TypeScript errors (attempt $FIX_ATTEMPT / $MAX_FIX_ATTEMPTS), asking Claude to fix..."
               TSC_FIX_PROMPT=$(printf 'Fix ONLY the following TypeScript compilation errors. Do not refactor or change anything else.\n\nTypeScript errors:\n%s' "$TSC_OUTPUT")
               claude -p "$TSC_FIX_PROMPT" \
+                --model claude-opus-4-6 \
                 --dangerously-skip-permissions \
                 --max-turns 20 \
                 --output-format json > /tmp/claude-fix-${FIX_ATTEMPT}.json 2>&1 || true
