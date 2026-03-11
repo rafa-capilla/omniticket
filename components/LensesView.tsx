@@ -133,15 +133,51 @@ export const LensesView: React.FC<Props> = ({
             </button>
           ))}
         </div>
-        <div className="flex items-center space-x-6 bg-slate-900 px-6 py-3 rounded-2xl">
-          <div className="flex flex-col">
-            <span className="text-[8px] font-black uppercase text-slate-500 tracking-tighter mb-1">Desde</span>
-            <input type="date" value={dateRange.start} onChange={e => setDateRange(r => ({ ...r, start: safeText(e.target.value) }))} className="bg-transparent text-[11px] font-mono text-emerald-400 outline-none" />
-          </div>
-          <div className="text-slate-800 font-bold">|</div>
-          <div className="flex flex-col">
-            <span className="text-[8px] font-black uppercase text-slate-500 tracking-tighter mb-1">Hasta</span>
-            <input type="date" value={dateRange.end} onChange={e => setDateRange(r => ({ ...r, end: safeText(e.target.value) }))} className="bg-transparent text-[11px] font-mono text-emerald-400 outline-none" />
+        <div className="flex items-center gap-3">
+          {[
+            {
+              label: '30d', fn: () => {
+                const end = new Date();
+                const start = new Date();
+                start.setDate(end.getDate() - 30);
+                return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
+              }
+            },
+            {
+              label: '3m', fn: () => {
+                const end = new Date();
+                const start = new Date();
+                start.setMonth(end.getMonth() - 3);
+                return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
+              }
+            },
+            {
+              label: 'año', fn: () => {
+                const now = new Date();
+                const start = new Date(now.getFullYear(), 0, 1);
+                const end = new Date(now.getFullYear(), 11, 31);
+                return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
+              }
+            },
+          ].map(({ label, fn }) => (
+            <button
+              key={label}
+              onClick={() => setDateRange(fn())}
+              className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-white hover:bg-slate-800 transition-all"
+            >
+              {label}
+            </button>
+          ))}
+          <div className="flex items-center space-x-6 bg-slate-900 px-6 py-3 rounded-2xl">
+            <div className="flex flex-col">
+              <span className="text-[8px] font-black uppercase text-slate-500 tracking-tighter mb-1">Desde</span>
+              <input type="date" value={dateRange.start} onChange={e => setDateRange(r => ({ ...r, start: safeText(e.target.value) }))} className="bg-transparent text-[11px] font-mono text-emerald-400 outline-none" />
+            </div>
+            <div className="text-slate-800 font-bold">|</div>
+            <div className="flex flex-col">
+              <span className="text-[8px] font-black uppercase text-slate-500 tracking-tighter mb-1">Hasta</span>
+              <input type="date" value={dateRange.end} onChange={e => setDateRange(r => ({ ...r, end: safeText(e.target.value) }))} className="bg-transparent text-[11px] font-mono text-emerald-400 outline-none" />
+            </div>
           </div>
         </div>
       </div>
