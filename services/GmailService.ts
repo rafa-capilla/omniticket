@@ -43,8 +43,10 @@ interface GmailLabelResponse {
 /**
  * Extrae texto de un payload de Gmail de forma recursiva.
  * Prioriza text/plain > text/html > recursión en sub-partes multipart.
+ *
+ * Exported for unit testing.
  */
-function extractTextFromPayload(payload: GmailPayload): string {
+export function extractTextFromPayload(payload: GmailPayload): string {
   // Caso base: el payload tiene body con datos directamente
   if (payload.body?.data) {
     try {
