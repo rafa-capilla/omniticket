@@ -206,8 +206,8 @@ jobs:
           TSC_OK=false
 
           while [ $FIX_ATTEMPT -le $MAX_FIX_ATTEMPTS ]; do
-            TSC_OUTPUT=$(docker compose run --rm omniticket sh -c "npm ci && npx tsc --noEmit" 2>&1)
-            TSC_EXIT=$?
+            TSC_EXIT=0
+            TSC_OUTPUT=$(docker compose run --rm omniticket sh -c "npm ci && npx tsc --noEmit" 2>&1) || TSC_EXIT=$?
 
             if [ $TSC_EXIT -eq 0 ]; then
               TSC_OK=true
