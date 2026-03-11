@@ -65,8 +65,16 @@ const App: React.FC = () => {
   // ─── AUTH ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     const savedToken = localStorage.getItem('google_access_token');
-    if (savedToken) setToken(savedToken);
+    const expiresAt = Number(localStorage.getItem('google_token_expires_at') || 0);
+    const isExpired = !expiresAt || Date.now() >= expiresAt;
+
     GoogleAuthService.init((newToken) => setToken(newToken), CLIENT_ID);
+
+    if (savedToken && !isExpired) {
+      setToken(savedToken);
+    } else if (savedToken && isExpired) {
+      GoogleAuthService.silentRefresh();
+    }
   }, []);
 
   // Silent refresh check every 60s

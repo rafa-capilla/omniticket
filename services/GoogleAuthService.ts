@@ -47,7 +47,7 @@ export class GoogleAuthService {
 
   static login() {
     if (this.tokenClient) {
-      this.tokenClient.requestAccessToken({ prompt: 'consent' });
+      this.tokenClient.requestAccessToken({ prompt: '' });
     }
   }
 
