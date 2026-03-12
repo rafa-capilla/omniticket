@@ -189,9 +189,11 @@ export class ConfigService {
           }
         );
       }
-    } catch (e) {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === '401') throw e; // Auth errors must propagate
       console.error("Error en runMigrations:", e);
-      // Non-fatal: don't block app startup
+      // Non-fatal: don't block app startup for non-auth errors
     }
   }
 
