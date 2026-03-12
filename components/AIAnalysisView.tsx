@@ -4,7 +4,7 @@ import { Category, AIAnalysisResult, AggregatedData } from '../types';
 import { AIAnalysisService } from '../services/AIAnalysisService';
 import { ConfigService } from '../services/ConfigService';
 import { useApp } from '../contexts/AppContext';
-import { safeText, safeNum, COLORS } from '../lib/utils';
+import { safeText, safeNum, COLORS, getErrorMessage } from '../lib/utils';
 import { TOTAL_TICKET_MARKER } from '../lib/constants';
 
 interface Props {
@@ -88,7 +88,7 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
       const res = await svc.analyze(prompt, aggregatedData, settings.GEMINI_API_KEY);
       setResult(res);
     } catch (err: unknown) {
-      toast.error('Error en análisis: ' + (err instanceof Error ? err.message : String(err)));
+      toast.error('Error en análisis: ' + getErrorMessage(err));
     } finally {
       setIsAnalyzing(false);
     }

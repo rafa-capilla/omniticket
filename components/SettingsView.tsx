@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ConfigService } from '../services/ConfigService';
 import { useApp } from '../contexts/AppContext';
-import { safeText } from '../lib/utils';
+import { safeText, getErrorMessage } from '../lib/utils';
 
 interface Props {
   onLogout: () => void;
@@ -29,7 +29,7 @@ export const SettingsView: React.FC<Props> = ({ onLogout }) => {
       setLoaded(true);
     }).catch((err: unknown) => {
       console.error('[SettingsView] getSettings failed:', err);
-      toast.error('Error al cargar la configuración: ' + (err instanceof Error ? err.message : String(err)));
+      toast.error('Error al cargar la configuración: ' + getErrorMessage(err));
     });
   }, [token, dbId, toast]);
 
@@ -45,7 +45,7 @@ export const SettingsView: React.FC<Props> = ({ onLogout }) => {
       await loadData();
       toast.success('Ajustes guardados.');
     } catch (err: unknown) {
-      toast.error('Error al guardar: ' + (err instanceof Error ? err.message : String(err)));
+      toast.error('Error al guardar: ' + getErrorMessage(err));
     } finally {
       setIsSaving(false);
     }

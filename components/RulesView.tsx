@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Rule, Category } from '../types';
 import { SheetsService } from '../services/SheetsService';
 import { useApp } from '../contexts/AppContext';
-import { safeText } from '../lib/utils';
+import { safeText, getErrorMessage } from '../lib/utils';
 import { DEFAULT_CATEGORY_NAMES } from '../lib/constants';
 
 interface Props {
@@ -34,7 +34,7 @@ export const RulesView: React.FC<Props> = ({ rules, categories }) => {
       setNewRule({ pattern: '', normalized: '', category: defaultCategory });
       await loadData();
     } catch (err: unknown) {
-      toast.error('Error al guardar regla: ' + (err instanceof Error ? err.message : String(err)));
+      toast.error('Error al guardar regla: ' + getErrorMessage(err));
     }
   };
 
@@ -44,7 +44,7 @@ export const RulesView: React.FC<Props> = ({ rules, categories }) => {
       await sheets.deleteRule(dbId, rowIndex);
       await loadData();
     } catch (err: unknown) {
-      toast.error('Error al eliminar regla: ' + (err instanceof Error ? err.message : String(err)));
+      toast.error('Error al eliminar regla: ' + getErrorMessage(err));
     }
   };
 
@@ -55,7 +55,7 @@ export const RulesView: React.FC<Props> = ({ rules, categories }) => {
       setEditingIndex(null);
       await loadData();
     } catch (err: unknown) {
-      toast.error('Error al actualizar regla: ' + (err instanceof Error ? err.message : String(err)));
+      toast.error('Error al actualizar regla: ' + getErrorMessage(err));
     }
   };
 

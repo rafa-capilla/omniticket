@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { Rule, Category, DashboardStats, LensType } from '../types';
 import { AIAnalysisView } from './AIAnalysisView';
-import { safeText, safeNum, COLORS } from '../lib/utils';
+import { safeText, safeNum, COLORS, toLocalDateString } from '../lib/utils';
 import { TOTAL_TICKET_MARKER } from '../lib/constants';
 
 interface Props {
@@ -137,29 +137,26 @@ export const LensesView: React.FC<Props> = ({
           {[
             {
               label: '30d', fn: () => {
-                const toLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                 const end = new Date();
                 const start = new Date();
                 start.setDate(end.getDate() - 30);
-                return { start: toLocal(start), end: toLocal(end) };
+                return { start: toLocalDateString(start), end: toLocalDateString(end) };
               }
             },
             {
               label: '3m', fn: () => {
-                const toLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                 const end = new Date();
                 const start = new Date();
                 start.setMonth(end.getMonth() - 3);
-                return { start: toLocal(start), end: toLocal(end) };
+                return { start: toLocalDateString(start), end: toLocalDateString(end) };
               }
             },
             {
               label: 'año', fn: () => {
-                const toLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                 const now = new Date();
                 const start = new Date(now.getFullYear(), 0, 1);
                 const end = new Date(now.getFullYear(), 11, 31);
-                return { start: toLocal(start), end: toLocal(end) };
+                return { start: toLocalDateString(start), end: toLocalDateString(end) };
               }
             },
           ].map(({ label, fn }) => (
