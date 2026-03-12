@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Category } from '../types';
 import { SheetsService } from '../services/SheetsService';
 import { useApp } from '../contexts/AppContext';
-import { safeText } from '../lib/utils';
+import { safeText, getErrorMessage } from '../lib/utils';
 
 interface Props {
   categories: Category[];
@@ -39,7 +39,7 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
       setNewCat({ name: '', description: '' });
       await loadData();
     } catch (err: unknown) {
-      toast.error('Error al añadir: ' + (err instanceof Error ? err.message : String(err)));
+      toast.error('Error al añadir: ' + getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -55,7 +55,7 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
       setEditingIndex(null);
       await loadData();
     } catch (err: unknown) {
-      toast.error('Error al editar: ' + (err instanceof Error ? err.message : String(err)));
+      toast.error('Error al editar: ' + getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -93,7 +93,7 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
       setDeleteModal(null);
       await loadData();
     } catch (err: unknown) {
-      toast.error('Error al eliminar: ' + (err instanceof Error ? err.message : String(err)));
+      toast.error('Error al eliminar: ' + getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }

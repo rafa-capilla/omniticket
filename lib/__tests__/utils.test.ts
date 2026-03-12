@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { safeText, safeNum } from '../utils';
+import { safeText, safeNum, toLocalDateString, getErrorMessage } from '../utils';
 
 // ─── safeText ────────────────────────────────────────────────────────────────
 
@@ -70,5 +70,53 @@ describe('safeNum', () => {
 
   it('returns 0 for an empty string', () => {
     expect(safeNum('')).toBe(0);
+  });
+});
+
+// ─── toLocalDateString ────────────────────────────────────────────────────────
+
+describe('toLocalDateString', () => {
+  it('formats a date as YYYY-MM-DD', () => {
+    const d = new Date(2025, 0, 15); // Jan 15, 2025
+    expect(toLocalDateString(d)).toBe('2025-01-15');
+  });
+
+  it('pads single-digit month and day with leading zero', () => {
+    const d = new Date(2025, 2, 5); // Mar 5, 2025
+    expect(toLocalDateString(d)).toBe('2025-03-05');
+  });
+
+  it('handles December 31st correctly', () => {
+    const d = new Date(2025, 11, 31); // Dec 31, 2025
+    expect(toLocalDateString(d)).toBe('2025-12-31');
+  });
+
+  it('handles January 1st correctly', () => {
+    const d = new Date(2026, 0, 1); // Jan 1, 2026
+    expect(toLocalDateString(d)).toBe('2026-01-01');
+  });
+});
+
+// ─── getErrorMessage ──────────────────────────────────────────────────────────
+
+describe('getErrorMessage', () => {
+  it('extracts the message from an Error instance', () => {
+    expect(getErrorMessage(new Error('something broke'))).toBe('something broke');
+  });
+
+  it('converts a string to itself', () => {
+    expect(getErrorMessage('raw string error')).toBe('raw string error');
+  });
+
+  it('converts a number to its string representation', () => {
+    expect(getErrorMessage(42)).toBe('42');
+  });
+
+  it('converts null to the string "null"', () => {
+    expect(getErrorMessage(null)).toBe('null');
+  });
+
+  it('converts undefined to the string "undefined"', () => {
+    expect(getErrorMessage(undefined)).toBe('undefined');
   });
 });
