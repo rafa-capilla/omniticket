@@ -50,8 +50,7 @@ export class SyncEngine {
     const results: SyncResult[] = [];
     const total = threadIds.length;
 
-    for (let i = 0; i < total; i++) {
-      const threadId = threadIds[i];
+    for (const [i, threadId] of threadIds.entries()) {
       const ticketNum = `(${i + 1}/${total})`;
 
       try {

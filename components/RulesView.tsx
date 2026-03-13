@@ -60,8 +60,10 @@ export const RulesView: React.FC<Props> = ({ rules, categories }) => {
   };
 
   const startEdit = (i: number) => {
+    const rule = rules[i];
+    if (!rule) return;
     setEditingIndex(i);
-    setEditForm({ ...rules[i] });
+    setEditForm({ ...rule });
   };
 
   return (
