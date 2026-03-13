@@ -100,7 +100,7 @@ jobs:
           - Do not delete code without verifying it is unreferenced
           - If there is nothing clear to improve, do not force changes
 
-          When done, generate a Markdown summary of the changes:
+          When done, write a Markdown summary to /tmp/claude-summary-pass1.md with:
           - File modified
           - What was changed and why"
           else
@@ -131,7 +131,7 @@ jobs:
           - Do not delete code without verifying it is unreferenced
           - If there is nothing clear to improve, do not force changes
 
-          When done, generate a Markdown summary:
+          When done, write a Markdown summary to /tmp/claude-summary-pass1.md with:
           - File modified
           - What was changed and why (quality fix or new idea)"
           fi
@@ -190,7 +190,10 @@ jobs:
             echo "rate_limited=false" >> $GITHUB_OUTPUT
           fi
 
-          echo "$RESULT" > /tmp/claude-summary-pass1.md
+          # If Claude didn't write the summary file, create a fallback
+          if [ ! -s /tmp/claude-summary-pass1.md ]; then
+            echo "_No summary generated._" > /tmp/claude-summary-pass1.md
+          fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Summary of changes — Pass 1" >> $GITHUB_STEP_SUMMARY
