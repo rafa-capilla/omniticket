@@ -46,6 +46,7 @@ export class ConfigService {
       id = await this.getOrFindId();
     } catch (e: unknown) {
       if (e instanceof Error && e.message === "401") throw e;
+      if (!(e instanceof Error) || e.message !== "NOT_FOUND") throw e;
 
       const spreadsheet = {
         properties: { title: ConfigService.FILENAME },
@@ -60,8 +61,8 @@ export class ConfigService {
         headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(spreadsheet)
       });
-      const data = await response.json();
-      id = String(data.spreadsheetId || '');
+      const data: { spreadsheetId?: string } = await response.json();
+      id = String(data.spreadsheetId ?? '');
       this.spreadsheetId = id;
 
       await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchUpdate`, {

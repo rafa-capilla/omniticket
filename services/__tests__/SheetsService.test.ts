@@ -62,7 +62,7 @@ describe('SheetsService.getCategories', () => {
     const result = await sheets.getCategories(SPREADSHEET_ID);
 
     expect(result).toHaveLength(1);
-    expect(result[0].name).toBe('Bebidas');
+    expect(result[0]!.name).toBe('Bebidas');
   });
 
   it('returns empty array when no values are present', async () => {
@@ -91,7 +91,7 @@ describe('SheetsService.getCategories', () => {
     const sheets = new SheetsService(TOKEN);
     const result = await sheets.getCategories(SPREADSHEET_ID);
 
-    expect(result[0].status).toBe('active');
+    expect(result[0]!.status).toBe('active');
   });
 });
 
@@ -125,7 +125,7 @@ describe('SheetsService.getRules', () => {
     const sheets = new SheetsService(TOKEN);
     const result = await sheets.getRules(SPREADSHEET_ID);
 
-    expect(result[0].category).toBe('Otros');
+    expect(result[0]!.category).toBe('Otros');
   });
 
   it('returns empty array on API error', async () => {
@@ -164,7 +164,7 @@ describe('SheetsService.appendExpense', () => {
     });
 
     expect(mockApiFetch).toHaveBeenCalledTimes(1);
-    const body = JSON.parse(mockApiFetch.mock.calls[0][1]?.body as string);
+    const body = JSON.parse(mockApiFetch.mock.calls[0]![1]?.body as string);
 
     // Item row
     expect(body.values[0]).toEqual([
@@ -201,7 +201,7 @@ describe('SheetsService.appendExpense', () => {
       total_ticket: 1.0,
     });
 
-    const body = JSON.parse(mockApiFetch.mock.calls[0][1]?.body as string);
+    const body = JSON.parse(mockApiFetch.mock.calls[0]![1]?.body as string);
     expect(body.values[0][9]).toBe('');
   });
 
@@ -220,7 +220,7 @@ describe('SheetsService.appendExpense', () => {
       total_ticket: 6.5,
     });
 
-    const body = JSON.parse(mockApiFetch.mock.calls[0][1]?.body as string);
+    const body = JSON.parse(mockApiFetch.mock.calls[0]![1]?.body as string);
     expect(body.values).toHaveLength(3); // 2 items + 1 total
     expect(body.values[2][8]).toBe(6.5); // total row
   });
@@ -247,7 +247,7 @@ describe('SheetsService.updateCategoryInGastos', () => {
     await sheets.updateCategoryInGastos(SPREADSHEET_ID, 'Limpieza', 'Higiene');
 
     expect(mockApiFetch).toHaveBeenCalledTimes(2);
-    const batchBody = JSON.parse(mockApiFetch.mock.calls[1][1]?.body as string);
+    const batchBody = JSON.parse(mockApiFetch.mock.calls[1]![1]?.body as string);
 
     expect(batchBody.data).toEqual([
       { range: 'Gastos!E2', values: [['Higiene']] },

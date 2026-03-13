@@ -50,7 +50,8 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
     setIsLoading(true);
     try {
       const original = categories[editingIndex];
-      const updated = { ...original, name: editForm.name.trim(), description: editForm.description.trim() };
+      if (!original) return;
+      const updated: Category = { ...original, name: editForm.name.trim(), description: editForm.description.trim() };
       await sheets.updateCategory(dbId, editingIndex + 2, updated); // +2: header + 0-indexed
       setEditingIndex(null);
       await loadData();
