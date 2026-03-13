@@ -7,6 +7,7 @@ import { ticketSchema } from "../schemas/ticketSchema";
 import { withRetry } from "./retry";
 import { SyncResult, OmniSettings, Category, Rule } from "../types";
 import { DEFAULT_CATEGORY_NAMES } from "../lib/constants";
+import { getErrorMessage } from "../lib/utils";
 
 /**
  * Motor de sincronización principal de OmniTicket.
@@ -72,7 +73,7 @@ export class SyncEngine {
         results.push({ messageId: threadId, status: 'success' });
         onProgress?.(`✓ Ticket ${ticketNum}: ${ticketData.tienda} (${ticketData.fecha})`);
       } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
         console.error(`Error en thread ${threadId}:`, error);
         results.push({ messageId: threadId, status: 'error', error: msg });
         onProgress?.(`✗ Ticket ${ticketNum}: ${msg}`);
@@ -179,7 +180,7 @@ export class SyncEngine {
       ticketData = ticketSchema.parse(rawJson);
     } catch (e) {
       console.error("Fallo al parsear JSON de Gemini:", response.text, e);
-      const detail = e instanceof Error ? e.message : String(e);
+      const detail = getErrorMessage(e);
       throw new Error(`Datos de IA inválidos: ${detail}`);
     }
 

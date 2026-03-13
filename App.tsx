@@ -4,7 +4,7 @@ import { SyncEngine } from './services/SyncEngine';
 import { ConfigService } from './services/ConfigService';
 import { SheetsService } from './services/SheetsService';
 import { HistoryTicket, LensType, Rule, Category, ViewState } from './types';
-import { safeText, safeNum } from './lib/utils';
+import { safeText, safeNum, toLocalDateString, getErrorMessage } from './lib/utils';
 import { TOTAL_TICKET_MARKER } from './lib/constants';
 import { AppContext } from './contexts/AppContext';
 import { ToastItem, ToastList } from './components/ToastList';
@@ -32,13 +32,12 @@ const App: React.FC = () => {
   const [categories, setCategories]     = useState<Category[]>([]);
 
   const [dateRange, setDateRange] = useState(() => {
-    const toLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     return {
-      start: toLocal(start),
-      end: toLocal(end),
+      start: toLocalDateString(start),
+      end: toLocalDateString(end),
     };
   });
 
@@ -109,7 +108,7 @@ const App: React.FC = () => {
       setAppState('READY');
       isBootstrapped.current = true;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrorMessage(err);
       if (msg === '401') handleLogout();
       else {
         toast.error('Error al inicializar: ' + msg);
@@ -158,7 +157,7 @@ const App: React.FC = () => {
       });
       setHistory(Array.from(historyMap.values()).sort((a, b) => b.fecha.localeCompare(a.fecha)));
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrorMessage(err);
       if (msg === '401') {
         toast.error('Sesión expirada. Haz clic en "Reconectar" para continuar.');
       } else {
@@ -180,7 +179,7 @@ const App: React.FC = () => {
       await loadData();
       toast.success('Sincronización completada.');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrorMessage(err);
       if (msg === '401') {
         toast.error('Sesión expirada. Haz clic en "Reconectar" para continuar.');
       } else {
