@@ -111,12 +111,31 @@ export class SyncEngine {
       throw new Error("GEMINI_API_KEY no configurada en el Spreadsheet (Settings!B3). Por favor, configúrala en la hoja Settings.");
     }
 
-    const activeCategories = categories.filter(c => c.status === 'active');
-    const categoriesToUse = activeCategories.length > 0
-      ? activeCategories
-      : DEFAULT_CATEGORY_NAMES.map(name => ({ name, description: '', status: 'active' as const }));
+    const categoriesToUse = this.resolveActiveCategories(categories);
+    const rawJson = await this.callGeminiExtraction(apiKey, emailContent, uuid, categoriesToUse);
+    const ticketData = this.parseAndValidateResponse(rawJson, uuid);
+    this.recalculateLineTotals(ticketData);
+    this.applyUserRules(ticketData, rules, categoriesToUse);
 
-    const categoryList = categoriesToUse
+    return ticketData;
+  }
+
+  /** Resolves the active category list, falling back to defaults if none are active. */
+  private resolveActiveCategories(categories: Category[]): Category[] {
+    const active = categories.filter(c => c.status === 'active');
+    return active.length > 0
+      ? active
+      : DEFAULT_CATEGORY_NAMES.map(name => ({ name, description: '', status: 'active' as const }));
+  }
+
+  /** Calls Gemini AI to extract structured ticket data from email content. */
+  private async callGeminiExtraction(
+    apiKey: string,
+    emailContent: string,
+    uuid: string,
+    categories: Category[]
+  ): Promise<unknown> {
+    const categoryList = categories
       .map(c => c.description ? `- ${c.name}: ${c.description}` : `- ${c.name}`)
       .join('\n');
 
@@ -172,25 +191,37 @@ export class SyncEngine {
       }
     });
 
-    let ticketData;
     try {
-      const rawJson = JSON.parse(response.text || "{}");
-      rawJson.id = uuid; // always use our UUID
-      ticketData = ticketSchema.parse(rawJson);
-    } catch (e) {
+      return JSON.parse(response.text || "{}");
+    } catch (e: unknown) {
       console.error("Fallo al parsear JSON de Gemini:", response.text, e);
-      const detail = getErrorMessage(e);
-      throw new Error(`Datos de IA inválidos: ${detail}`);
+      throw new Error(`Respuesta de Gemini no es JSON válido: ${getErrorMessage(e)}`);
     }
+  }
 
-    // Post-process: garantizar que precio_total_linea sea siempre neto
+  /** Validates the raw Gemini response against the Zod schema. */
+  private parseAndValidateResponse(rawJson: unknown, uuid: string): TicketData {
+    try {
+      const json = rawJson as Record<string, unknown>;
+      json.id = uuid; // always use our UUID
+      return ticketSchema.parse(json);
+    } catch (e: unknown) {
+      console.error("Fallo en validación Zod:", e);
+      throw new Error(`Datos de IA inválidos: ${getErrorMessage(e)}`);
+    }
+  }
+
+  /** Recalculates precio_total_linea to always be net (precio_unitario * cantidad - descuento). */
+  private recalculateLineTotals(ticketData: TicketData): void {
     for (const item of ticketData.items) {
       item.precio_total_linea = (item.precio_unitario * item.cantidad) - item.descuento;
     }
+  }
 
-    // Post-process: apply user rules (highest priority)
-    const activeCategoryNames = new Set(categoriesToUse.map(c => c.name));
-    ticketData.items.forEach(item => {
+  /** Applies user rules (highest priority) and validates categories. */
+  private applyUserRules(ticketData: TicketData, rules: Rule[], categories: Category[]): void {
+    const validCategoryNames = new Set(categories.map(c => c.name));
+    for (const item of ticketData.items) {
       const match = rules.find(r =>
         r.pattern && item.nombre.toLowerCase().includes(r.pattern.toLowerCase())
       );
@@ -198,12 +229,9 @@ export class SyncEngine {
         item.nombre_normalizado = match.normalized;
         item.categoria = match.category;
       }
-      // Validate category — reassign to Otros if unknown
-      if (!activeCategoryNames.has(item.categoria)) {
+      if (!validCategoryNames.has(item.categoria)) {
         item.categoria = 'Otros';
       }
-    });
-
-    return ticketData;
+    }
   }
 }

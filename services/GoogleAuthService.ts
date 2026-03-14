@@ -2,14 +2,31 @@
 // Minimal types for Google Identity Services (loaded via script tag, no @types package)
 interface TokenResponse {
   access_token?: string;
+  error?: string;
+  error_description?: string;
 }
 
 interface TokenClient {
   requestAccessToken(opts: { prompt: string }): void;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const google: any;
+interface GoogleOAuth2 {
+  initTokenClient(config: {
+    client_id: string;
+    scope: string;
+    callback: (response: TokenResponse) => void;
+  }): TokenClient;
+}
+
+interface GoogleAccounts {
+  oauth2: GoogleOAuth2;
+}
+
+interface GoogleIdentityServices {
+  accounts: GoogleAccounts;
+}
+
+declare const google: GoogleIdentityServices;
 
 const TOKEN_KEY = 'google_access_token';
 const TOKEN_EXPIRES_KEY = 'google_token_expires_at';

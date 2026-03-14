@@ -8,7 +8,7 @@ export class SheetsService {
 
   // ─── GASTOS ───────────────────────────────────────────────────────────────
 
-  async appendExpense(spreadsheetId: string, data: TicketData) {
+  async appendExpense(spreadsheetId: string, data: TicketData): Promise<void> {
     const itemRows = data.items.map(item => [
       data.id, data.tienda, data.fecha,
       item.nombre, item.categoria,

@@ -107,7 +107,7 @@ export class GmailService {
     return fullText;
   }
 
-  async addLabelToThread(threadId: string, labelName: string) {
+  async addLabelToThread(threadId: string, labelName: string): Promise<void> {
     const labelId = await this.getOrCreateLabel(labelName);
     await apiFetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}/modify`,
@@ -123,7 +123,8 @@ export class GmailService {
   }
 
   private async getOrCreateLabel(name: string): Promise<string> {
-    if (this.labelCache.has(name)) return this.labelCache.get(name)!;
+    const cached = this.labelCache.get(name);
+    if (cached !== undefined) return cached;
 
     const response = await apiFetch(
       'https://gmail.googleapis.com/gmail/v1/users/me/labels',
