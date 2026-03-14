@@ -1,3 +1,6 @@
+export type CategoryStatus = 'active' | 'inactive';
+
+export type SettingKey = 'GMAIL_SEARCH_LABEL' | 'GMAIL_PROCESSED_LABEL' | 'GEMINI_API_KEY' | 'LAST_SYNC';
 
 export interface OmniSettings {
   GMAIL_SEARCH_LABEL: string;
@@ -6,9 +9,11 @@ export interface OmniSettings {
   LAST_SYNC: string;
 }
 
+export type SyncStatus = 'success' | 'error';
+
 export interface SyncResult {
   messageId: string;
-  status: 'success' | 'error';
+  status: SyncStatus;
   error?: string;
 }
 
@@ -47,7 +52,7 @@ export interface Rule {
 export interface Category {
   name: string;
   description: string;
-  status: 'active' | 'inactive';
+  status: CategoryStatus;
 }
 
 export interface DashboardStats {

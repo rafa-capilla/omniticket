@@ -1,4 +1,4 @@
-import { OmniSettings, SheetsValuesResponse, SheetsMetadataResponse, DriveFilesResponse } from '../types';
+import { OmniSettings, SettingKey, SheetsValuesResponse, SheetsMetadataResponse, DriveFilesResponse } from '../types';
 import { TOTAL_TICKET_MARKER, GastosCol } from '../lib/constants';
 import { apiFetch } from './apiFetch';
 import { safeNum } from '../lib/utils';
@@ -218,20 +218,20 @@ export class ConfigService {
     const rows = data.values ?? [];
     const settings: OmniSettings = { GMAIL_SEARCH_LABEL: 'OmniTicket', GMAIL_PROCESSED_LABEL: 'OmniTicket/Procesado', GEMINI_API_KEY: '', LAST_SYNC: 'Nunca' };
 
-    rows.forEach((row: string[]) => {
+    const validKeys = new Set<SettingKey>(['GMAIL_SEARCH_LABEL', 'GMAIL_PROCESSED_LABEL', 'GEMINI_API_KEY', 'LAST_SYNC']);
+    for (const row of rows) {
       const key = (row[0] ?? '').trim();
       const val = (row[1] ?? '').trim();
-      if (key === 'GMAIL_SEARCH_LABEL') settings.GMAIL_SEARCH_LABEL = val;
-      if (key === 'GMAIL_PROCESSED_LABEL') settings.GMAIL_PROCESSED_LABEL = val;
-      if (key === 'GEMINI_API_KEY') settings.GEMINI_API_KEY = val;
-      if (key === 'LAST_SYNC') settings.LAST_SYNC = val;
-    });
+      if (validKeys.has(key as SettingKey)) {
+        settings[key as keyof OmniSettings] = val;
+      }
+    }
     return settings;
   }
 
-  async updateSetting(key: 'GEMINI_API_KEY' | 'GMAIL_SEARCH_LABEL' | 'GMAIL_PROCESSED_LABEL', value: string): Promise<void> {
+  async updateSetting(key: Exclude<SettingKey, 'LAST_SYNC'>, value: string): Promise<void> {
     const id = await this.getOrFindId();
-    const rowMap: Record<string, number> = {
+    const rowMap: Record<Exclude<SettingKey, 'LAST_SYNC'>, number> = {
       GMAIL_SEARCH_LABEL: 1,
       GMAIL_PROCESSED_LABEL: 2,
       GEMINI_API_KEY: 3,
