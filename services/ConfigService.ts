@@ -92,6 +92,7 @@ export class ConfigService {
   /**
    * Aplica migraciones idempotentes al spreadsheet existente:
    * - Crea hoja "Categories" si no existe y la rellena con los 7 defaults
+   * - Corrige precio_total_linea para que sea siempre neto
    * - Escribe header "Producto Normalizado" en Gastos!J1 si está vacío
    */
   private async runMigrations(spreadsheetId: string): Promise<void> {
@@ -103,99 +104,109 @@ export class ConfigService {
       const meta: SheetsMetadataResponse = await metaResponse.json();
       const sheetTitles: string[] = (meta.sheets ?? []).map(s => String(s.properties?.title ?? ''));
 
-      // Migration 1: Create Categories sheet
-      if (!sheetTitles.includes('Categories')) {
-        await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            requests: [{ addSheet: { properties: { title: 'Categories', gridProperties: { frozenRowCount: 1 } } } }]
-          })
-        });
-
-        await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            valueInputOption: 'RAW',
-            data: [
-              { range: 'Categories!A1:C1', values: [['Name', 'Description', 'Status']] },
-              { range: `Categories!A2:C${DEFAULT_CATEGORIES.length + 1}`, values: DEFAULT_CATEGORIES }
-            ]
-          })
-        });
-      }
-
-      // Migration 3: Fix precio_total_linea to always be net (precio_unitario * cantidad - descuento)
-      const settingsKeysResponse = await apiFetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Settings!A:A`,
-        { headers: { Authorization: `Bearer ${this.accessToken}` } }
-      );
-      const settingsKeysData: SheetsValuesResponse = await settingsKeysResponse.json();
-      const settingsKeys: string[] = (settingsKeysData.values ?? []).map((r: string[]) => r[0] ?? '');
-      if (!settingsKeys.includes('MIGRATION_DISCOUNT_FIX')) {
-        const gastosResponse = await apiFetch(
-          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A2:J`,
-          { headers: { Authorization: `Bearer ${this.accessToken}` } }
-        );
-        const gastosData: SheetsValuesResponse = await gastosResponse.json();
-        const rows: string[][] = gastosData.values ?? [];
-
-        const updates: { range: string; values: [[number]] }[] = [];
-        rows.forEach((row, idx) => {
-          // Skip totals rows
-          if ((row[GastosCol.PRODUCTO] ?? '') === TOTAL_TICKET_MARKER) return;
-          const cantidad = safeNum(row[GastosCol.CANTIDAD]);
-          const precioUnitario = safeNum(row[GastosCol.PRECIO_UNIT]);
-          const descuento = safeNum(row[GastosCol.DESCUENTO]);
-          const currentTotal = safeNum(row[GastosCol.TOTAL_LINEA]);
-          const correct = precioUnitario * cantidad - descuento;
-          if (Math.abs(correct - currentTotal) > 0.001) {
-            updates.push({ range: `Gastos!I${idx + 2}`, values: [[correct]] });
-          }
-        });
-
-        if (updates.length > 0) {
-          await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ valueInputOption: 'RAW', data: updates })
-          });
-        }
-
-        // Mark migration as done
-        await apiFetch(
-          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Settings!A:B:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-          {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ values: [['MIGRATION_DISCOUNT_FIX', new Date().toISOString()]] })
-          }
-        );
-      }
-
-      // Migration 2: Add "Producto Normalizado" header to Gastos!J1
-      const headerResponse = await apiFetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!J1`,
-        { headers: { Authorization: `Bearer ${this.accessToken}` } }
-      );
-      const headerData: SheetsValuesResponse = await headerResponse.json();
-      if (!headerData.values || !headerData.values[0]?.[0]) {
-        await apiFetch(
-          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!J1?valueInputOption=RAW`,
-          {
-            method: 'PUT',
-            headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ values: [['Producto Normalizado']] })
-          }
-        );
-      }
+      await this.migrateCategoriesSheet(spreadsheetId, sheetTitles);
+      await this.migrateDiscountFix(spreadsheetId);
+      await this.migrateNormalizedHeader(spreadsheetId);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg === '401') throw e; // Auth errors must propagate
       console.error("Error en runMigrations:", e);
       // Non-fatal: don't block app startup for non-auth errors
     }
+  }
+
+  /** Migration 1: Create Categories sheet if it doesn't exist */
+  private async migrateCategoriesSheet(spreadsheetId: string, sheetTitles: string[]): Promise<void> {
+    if (sheetTitles.includes('Categories')) return;
+
+    await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [{ addSheet: { properties: { title: 'Categories', gridProperties: { frozenRowCount: 1 } } } }]
+      })
+    });
+
+    await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        valueInputOption: 'RAW',
+        data: [
+          { range: 'Categories!A1:C1', values: [['Name', 'Description', 'Status']] },
+          { range: `Categories!A2:C${DEFAULT_CATEGORIES.length + 1}`, values: DEFAULT_CATEGORIES }
+        ]
+      })
+    });
+  }
+
+  /** Migration 2: Fix precio_total_linea to always be net (precio_unitario * cantidad - descuento) */
+  private async migrateDiscountFix(spreadsheetId: string): Promise<void> {
+    const settingsKeysResponse = await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Settings!A:A`,
+      { headers: { Authorization: `Bearer ${this.accessToken}` } }
+    );
+    const settingsKeysData: SheetsValuesResponse = await settingsKeysResponse.json();
+    const settingsKeys: string[] = (settingsKeysData.values ?? []).map((r: string[]) => r[0] ?? '');
+
+    if (settingsKeys.includes('MIGRATION_DISCOUNT_FIX')) return;
+
+    const gastosResponse = await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A2:J`,
+      { headers: { Authorization: `Bearer ${this.accessToken}` } }
+    );
+    const gastosData: SheetsValuesResponse = await gastosResponse.json();
+    const rows: string[][] = gastosData.values ?? [];
+
+    const updates: { range: string; values: [[number]] }[] = [];
+    rows.forEach((row, idx) => {
+      if ((row[GastosCol.PRODUCTO] ?? '') === TOTAL_TICKET_MARKER) return;
+      const cantidad = safeNum(row[GastosCol.CANTIDAD]);
+      const precioUnitario = safeNum(row[GastosCol.PRECIO_UNIT]);
+      const descuento = safeNum(row[GastosCol.DESCUENTO]);
+      const currentTotal = safeNum(row[GastosCol.TOTAL_LINEA]);
+      const correct = precioUnitario * cantidad - descuento;
+      if (Math.abs(correct - currentTotal) > 0.001) {
+        updates.push({ range: `Gastos!I${idx + 2}`, values: [[correct]] });
+      }
+    });
+
+    if (updates.length > 0) {
+      await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valueInputOption: 'RAW', data: updates })
+      });
+    }
+
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Settings!A:B:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [['MIGRATION_DISCOUNT_FIX', new Date().toISOString()]] })
+      }
+    );
+  }
+
+  /** Migration 3: Add "Producto Normalizado" header to Gastos!J1 if missing */
+  private async migrateNormalizedHeader(spreadsheetId: string): Promise<void> {
+    const headerResponse = await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!J1`,
+      { headers: { Authorization: `Bearer ${this.accessToken}` } }
+    );
+    const headerData: SheetsValuesResponse = await headerResponse.json();
+
+    if (headerData.values?.[0]?.[0]) return;
+
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!J1?valueInputOption=RAW`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [['Producto Normalizado']] })
+      }
+    );
   }
 
   async getSettings(forcedId?: string): Promise<OmniSettings> {

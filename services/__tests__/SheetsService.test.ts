@@ -74,13 +74,20 @@ describe('SheetsService.getCategories', () => {
     expect(result).toEqual([]);
   });
 
-  it('returns empty array on API error instead of throwing', async () => {
+  it('returns empty array on non-auth API error instead of throwing', async () => {
     mockApiFetch.mockRejectedValue(new Error('Network error'));
 
     const sheets = new SheetsService(TOKEN);
     const result = await sheets.getCategories(SPREADSHEET_ID);
 
     expect(result).toEqual([]);
+  });
+
+  it('propagates 401 auth errors instead of swallowing them', async () => {
+    mockApiFetch.mockRejectedValue(new Error('401'));
+
+    const sheets = new SheetsService(TOKEN);
+    await expect(sheets.getCategories(SPREADSHEET_ID)).rejects.toThrow('401');
   });
 
   it('defaults to active when status is unrecognized', async () => {
@@ -128,13 +135,20 @@ describe('SheetsService.getRules', () => {
     expect(result[0]!.category).toBe('Otros');
   });
 
-  it('returns empty array on API error', async () => {
+  it('returns empty array on non-auth API error', async () => {
     mockApiFetch.mockRejectedValue(new Error('403'));
 
     const sheets = new SheetsService(TOKEN);
     const result = await sheets.getRules(SPREADSHEET_ID);
 
     expect(result).toEqual([]);
+  });
+
+  it('propagates 401 auth errors instead of swallowing them', async () => {
+    mockApiFetch.mockRejectedValue(new Error('401'));
+
+    const sheets = new SheetsService(TOKEN);
+    await expect(sheets.getRules(SPREADSHEET_ID)).rejects.toThrow('401');
   });
 });
 
