@@ -53,6 +53,7 @@ export class SheetsService {
         status: String(row[2] || '').toLowerCase() === 'inactive' ? 'inactive' as const : 'active' as const,
       })).filter((c: Category) => c.name);
     } catch (err) {
+      if (err instanceof Error && err.message === '401') throw err;
       console.error('[SheetsService] getCategories failed:', err);
       return [];
     }
@@ -145,6 +146,7 @@ export class SheetsService {
         category: row[2] || 'Otros'
       }));
     } catch (err) {
+      if (err instanceof Error && err.message === '401') throw err;
       console.error('[SheetsService] getRules failed:', err);
       return [];
     }
@@ -209,6 +211,7 @@ export class SheetsService {
       const sheet = (data.sheets ?? []).find(s => s.properties?.title === sheetName);
       return sheet?.properties?.sheetId ?? null;
     } catch (err) {
+      if (err instanceof Error && err.message === '401') throw err;
       console.error(`[SheetsService] getSheetNumericId('${sheetName}') failed:`, err);
       return null;
     }
