@@ -5,7 +5,7 @@ import { SheetsService } from "./SheetsService";
 import { ConfigService } from "./ConfigService";
 import { ticketSchema } from "../schemas/ticketSchema";
 import { withRetry } from "./retry";
-import { SyncResult, OmniSettings, Category, Rule } from "../types";
+import { SyncResult, TicketData, OmniSettings, Category, Rule } from "../types";
 import { DEFAULT_CATEGORY_NAMES } from "../lib/constants";
 import { getErrorMessage } from "../lib/utils";
 
@@ -105,7 +105,7 @@ export class SyncEngine {
     settings: OmniSettings,
     categories: Category[],
     rules: Rule[]
-  ) {
+  ): Promise<TicketData> {
     const apiKey = settings.GEMINI_API_KEY;
     if (!apiKey) {
       throw new Error("GEMINI_API_KEY no configurada en el Spreadsheet (Settings!B3). Por favor, configúrala en la hoja Settings.");

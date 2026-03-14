@@ -5,7 +5,7 @@ import { AIAnalysisService } from '../services/AIAnalysisService';
 import { ConfigService } from '../services/ConfigService';
 import { useApp } from '../contexts/AppContext';
 import { safeText, safeNum, COLORS, getErrorMessage } from '../lib/utils';
-import { TOTAL_TICKET_MARKER } from '../lib/constants';
+import { TOTAL_TICKET_MARKER, GastosCol } from '../lib/constants';
 
 interface Props {
   rawLines: string[][];
@@ -35,22 +35,22 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
     const lineItems: string[] = [];
 
     rawLines.forEach((row: string[]) => {
-      const date = row[2] ?? '';
+      const date = row[GastosCol.FECHA] ?? '';
       if (date < dateRange.start || date > dateRange.end) return;
 
-      if (row[3] === TOTAL_TICKET_MARKER) {
-        totalSpent += safeNum(row[8]);
+      if (row[GastosCol.PRODUCTO] === TOTAL_TICKET_MARKER) {
+        totalSpent += safeNum(row[GastosCol.TOTAL_LINEA]);
         ticketCount++;
       } else {
-        const cat = safeText(row[4] ?? 'Otros');
-        const prod = safeText(row[9] ?? '') || safeText(row[3] ?? '');
-        const store = safeText(row[1] ?? '');
-        const amount = safeNum(row[8]);
+        const cat = safeText(row[GastosCol.CATEGORIA] ?? 'Otros');
+        const prod = safeText(row[GastosCol.NOMBRE_NORM] ?? '') || safeText(row[GastosCol.PRODUCTO] ?? '');
+        const store = safeText(row[GastosCol.TIENDA] ?? '');
+        const amount = safeNum(row[GastosCol.TOTAL_LINEA]);
         catMap.set(cat, (catMap.get(cat) ?? 0) + amount);
         if (prod) prodMap.set(prod, (prodMap.get(prod) ?? 0) + amount);
         if (store) storeMap.set(store, (storeMap.get(store) ?? 0) + amount);
-        const cant = row[5] ?? '';       // F = Cantidad
-        const pUnit = safeNum(row[6]);   // G = Precio Unitario
+        const cant = row[GastosCol.CANTIDAD] ?? '';
+        const pUnit = safeNum(row[GastosCol.PRECIO_UNIT]);
         lineItems.push(`${date}|${store}|${prod}|${cat}|${cant}|${pUnit.toFixed(2)}€|${amount.toFixed(2)}€`);
       }
     });
