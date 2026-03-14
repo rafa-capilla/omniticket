@@ -1,6 +1,6 @@
 
 import { TicketData, Rule, Category, SheetsValuesResponse, SheetsMetadataResponse } from '../types';
-import { TOTAL_TICKET_MARKER } from '../lib/constants';
+import { TOTAL_TICKET_MARKER, GastosCol } from '../lib/constants';
 import { apiFetch } from './apiFetch';
 
 export class SheetsService {
@@ -112,7 +112,7 @@ export class SheetsService {
 
     rows.forEach((row: string[], index: number) => {
       const rowNum = index + 2; // +2: row 1 is header, array is 0-indexed
-      const cat = row[4] ?? '';
+      const cat = row[GastosCol.CATEGORIA] ?? '';
       if (cat === oldName) {
         batchData.push({ range: `Gastos!E${rowNum}`, values: [[newName]] });
       }

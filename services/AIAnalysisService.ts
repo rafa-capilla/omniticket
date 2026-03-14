@@ -30,8 +30,8 @@ ${data.byStore.map(s => `- ${s.name}: ${s.total.toFixed(2)}€`).join('\n')}`;
       ? `\n\nLÍNEAS DE GASTO INDIVIDUALES (${Math.min(data.lineItems.length, MAX_LINES)} de ${data.lineItems.length} filas):\nfecha|tienda|producto|categoría|cant|precio_unit|total\n${data.lineItems.slice(0, MAX_LINES).join('\n')}`
       : '';
 
+    const ai = new GoogleGenAI({ apiKey });
     return withRetry(async () => {
-      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-2.5-pro",
         contents: `${prompt}\n\n${dataContext}${lineItemsSection}`,

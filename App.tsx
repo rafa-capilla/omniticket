@@ -5,7 +5,7 @@ import { ConfigService } from './services/ConfigService';
 import { SheetsService } from './services/SheetsService';
 import { HistoryTicket, LensType, Rule, Category, ViewState } from './types';
 import { safeText, safeNum, toLocalDateString, getErrorMessage } from './lib/utils';
-import { TOTAL_TICKET_MARKER } from './lib/constants';
+import { TOTAL_TICKET_MARKER, GastosCol } from './lib/constants';
 import { AppContext } from './contexts/AppContext';
 import { ToastItem, ToastList } from './components/ToastList';
 import { HistoryView } from './components/HistoryView';
@@ -143,12 +143,12 @@ const App: React.FC = () => {
       // Derive history from raw lines (same logic as SheetsService.fetchHistory)
       const historyMap = new Map<string, HistoryTicket>();
       lines.forEach((row) => {
-        const id = safeText(row[0]);
+        const id = safeText(row[GastosCol.ID]);
         if (!id) return;
-        const tienda = safeText(row[1]);
-        const fecha = safeText(row[2]);
-        const producto = safeText(row[3]);
-        const total = safeNum(row[8]);
+        const tienda = safeText(row[GastosCol.TIENDA]);
+        const fecha = safeText(row[GastosCol.FECHA]);
+        const producto = safeText(row[GastosCol.PRODUCTO]);
+        const total = safeNum(row[GastosCol.TOTAL_LINEA]);
         if (producto === TOTAL_TICKET_MARKER) {
           historyMap.set(id, { id, tienda, fecha, total });
         } else if (!historyMap.has(id)) {
@@ -195,9 +195,9 @@ const App: React.FC = () => {
   const categoryCounts = useMemo(() => {
     const map = new Map<string, number>();
     rawLines.forEach((row) => {
-      const name = safeText(row[3] || '');
+      const name = safeText(row[GastosCol.PRODUCTO] || '');
       if (!name || name === TOTAL_TICKET_MARKER) return;
-      const cat = safeText(row[4] || '');
+      const cat = safeText(row[GastosCol.CATEGORIA] || '');
       if (cat) map.set(cat, (map.get(cat) || 0) + 1);
     });
     return map;

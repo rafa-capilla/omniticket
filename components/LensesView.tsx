@@ -3,7 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
 import { Rule, Category, DashboardStats, LensType } from '../types';
 import { AIAnalysisView } from './AIAnalysisView';
 import { safeText, safeNum, COLORS, toLocalDateString } from '../lib/utils';
-import { TOTAL_TICKET_MARKER } from '../lib/constants';
+import { TOTAL_TICKET_MARKER, GastosCol } from '../lib/constants';
 
 interface Props {
   currentLens: LensType;
@@ -30,19 +30,19 @@ export const LensesView: React.FC<Props> = ({
   const processedData = useMemo(() => {
     return rawLines
       .filter((row: string[]) => {
-        const date = row[2] ?? '';
+        const date = row[GastosCol.FECHA] ?? '';
         return date >= dateRange.start && date <= dateRange.end;
       })
       .map((row: string[]) => {
-        const originalName = safeText(row[3] ?? '');
+        const originalName = safeText(row[GastosCol.PRODUCTO] ?? '');
         if (originalName === TOTAL_TICKET_MARKER || !originalName) return row;
 
         const matchedRule = rules.find(r =>
           r.pattern && originalName.toLowerCase().includes(safeText(r.pattern).toLowerCase())
         );
-        const normalizedFromSync = safeText(row[9] ?? '');
+        const normalizedFromSync = safeText(row[GastosCol.NOMBRE_NORM] ?? '');
         let normalizedName = normalizedFromSync || originalName;
-        let category = safeText(row[4] ?? 'Otros');
+        let category = safeText(row[GastosCol.CATEGORIA] ?? 'Otros');
 
         if (matchedRule) {
           normalizedName = safeText(matchedRule.normalized);
@@ -50,8 +50,8 @@ export const LensesView: React.FC<Props> = ({
         }
 
         const newRow = [...row];
-        newRow[3] = normalizedName;
-        newRow[4] = category;
+        newRow[GastosCol.PRODUCTO] = normalizedName;
+        newRow[GastosCol.CATEGORIA] = category;
         return newRow;
       });
   }, [rawLines, dateRange, rules]);
@@ -62,12 +62,12 @@ export const LensesView: React.FC<Props> = ({
     const catMap = new Map<string, number>();
 
     processedData.forEach((row: string[]) => {
-      if (row[3] === TOTAL_TICKET_MARKER) {
-        total += safeNum(row[8]);
+      if (row[GastosCol.PRODUCTO] === TOTAL_TICKET_MARKER) {
+        total += safeNum(row[GastosCol.TOTAL_LINEA]);
         count++;
       } else {
-        const cat = safeText(row[4]);
-        catMap.set(cat, (catMap.get(cat) ?? 0) + safeNum(row[8]));
+        const cat = safeText(row[GastosCol.CATEGORIA]);
+        catMap.set(cat, (catMap.get(cat) ?? 0) + safeNum(row[GastosCol.TOTAL_LINEA]));
       }
     });
 
@@ -82,9 +82,9 @@ export const LensesView: React.FC<Props> = ({
     if (currentLens === 'categories') {
       const agg = new Map<string, number>(activeCategories.map(c => [c.name, 0]));
       processedData.forEach((row: string[]) => {
-        if (row[3] === TOTAL_TICKET_MARKER || !row[3]) return;
-        const key = safeText(row[4]);
-        agg.set(key, (agg.get(key) ?? 0) + safeNum(row[8]));
+        if (row[GastosCol.PRODUCTO] === TOTAL_TICKET_MARKER || !row[GastosCol.PRODUCTO]) return;
+        const key = safeText(row[GastosCol.CATEGORIA]);
+        agg.set(key, (agg.get(key) ?? 0) + safeNum(row[GastosCol.TOTAL_LINEA]));
       });
       return Array.from(agg.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
     }
@@ -92,10 +92,10 @@ export const LensesView: React.FC<Props> = ({
     const agg = new Map<string, number>();
     processedData.forEach((row: string[]) => {
       let key = '';
-      if (currentLens === 'products') key = safeText(row[3]);
-      else if (currentLens === 'stores') key = safeText(row[1]);
-      if (safeText(row[3]) === TOTAL_TICKET_MARKER || !key) return;
-      agg.set(key, (agg.get(key) ?? 0) + safeNum(row[8]));
+      if (currentLens === 'products') key = safeText(row[GastosCol.PRODUCTO]);
+      else if (currentLens === 'stores') key = safeText(row[GastosCol.TIENDA]);
+      if (safeText(row[GastosCol.PRODUCTO]) === TOTAL_TICKET_MARKER || !key) return;
+      agg.set(key, (agg.get(key) ?? 0) + safeNum(row[GastosCol.TOTAL_LINEA]));
     });
     return Array.from(agg.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [processedData, currentLens, activeCategories]);

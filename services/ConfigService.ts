@@ -1,5 +1,5 @@
 import { OmniSettings, SheetsValuesResponse, SheetsMetadataResponse, DriveFilesResponse } from '../types';
-import { TOTAL_TICKET_MARKER } from '../lib/constants';
+import { TOTAL_TICKET_MARKER, GastosCol } from '../lib/constants';
 import { apiFetch } from './apiFetch';
 import { safeNum } from '../lib/utils';
 
@@ -144,11 +144,11 @@ export class ConfigService {
         const updates: { range: string; values: [[number]] }[] = [];
         rows.forEach((row, idx) => {
           // Skip totals rows
-          if ((row[3] ?? '') === TOTAL_TICKET_MARKER) return;
-          const cantidad = safeNum(row[5]);
-          const precioUnitario = safeNum(row[6]);
-          const descuento = safeNum(row[7]);
-          const currentTotal = safeNum(row[8]);
+          if ((row[GastosCol.PRODUCTO] ?? '') === TOTAL_TICKET_MARKER) return;
+          const cantidad = safeNum(row[GastosCol.CANTIDAD]);
+          const precioUnitario = safeNum(row[GastosCol.PRECIO_UNIT]);
+          const descuento = safeNum(row[GastosCol.DESCUENTO]);
+          const currentTotal = safeNum(row[GastosCol.TOTAL_LINEA]);
           const correct = precioUnitario * cantidad - descuento;
           if (Math.abs(correct - currentTotal) > 0.001) {
             updates.push({ range: `Gastos!I${idx + 2}`, values: [[correct]] });
