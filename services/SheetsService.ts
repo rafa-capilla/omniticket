@@ -1,10 +1,14 @@
 
 import { TicketData, Rule, Category, SheetsValuesResponse, SheetsMetadataResponse } from '../types';
-import { TOTAL_TICKET_MARKER, GastosCol } from '../lib/constants';
+import { TOTAL_TICKET_MARKER, GastosCol, SHEETS_API, SheetName } from '../lib/constants';
+import { authHeaders, jsonAuthHeaders, catchNonAuth } from '../lib/utils';
 import { apiFetch } from './apiFetch';
 
 export class SheetsService {
   constructor(private accessToken: string) {}
+
+  private get auth()     { return authHeaders(this.accessToken); }
+  private get jsonAuth() { return jsonAuthHeaders(this.accessToken); }
 
   // ─── GASTOS ───────────────────────────────────────────────────────────────
 
@@ -20,19 +24,15 @@ export class SheetsService {
     ];
     const values = [...itemRows, totalRow];
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A:J:append?valueInputOption=USER_ENTERED`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values })
-      }
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.GASTOS}!A:J:append?valueInputOption=USER_ENTERED`,
+      { method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ values }) }
     );
   }
 
   async fetchAllLineItems(spreadsheetId: string): Promise<string[][]> {
     const response = await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A2:J`,
-      { headers: { Authorization: `Bearer ${this.accessToken}` } }
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.GASTOS}!A2:J`,
+      { headers: this.auth }
     );
     const data: SheetsValuesResponse = await response.json();
     return data.values ?? [];
@@ -43,8 +43,8 @@ export class SheetsService {
   async getCategories(spreadsheetId: string): Promise<Category[]> {
     try {
       const response = await apiFetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Categories!A2:C1000`,
-        { headers: { Authorization: `Bearer ${this.accessToken}` } }
+        `${SHEETS_API}/${spreadsheetId}/values/${SheetName.CATEGORIES}!A2:C1000`,
+        { headers: this.auth }
       );
       const data: SheetsValuesResponse = await response.json();
       return (data.values ?? []).map((row: string[]) => ({
@@ -53,57 +53,29 @@ export class SheetsService {
         status: String(row[2] || '').toLowerCase() === 'inactive' ? 'inactive' as const : 'active' as const,
       })).filter((c: Category) => c.name);
     } catch (err) {
-      if (err instanceof Error && err.message === '401') throw err;
-      console.error('[SheetsService] getCategories failed:', err);
-      return [];
+      return catchNonAuth(err, '[SheetsService] getCategories failed:', []);
     }
   }
 
   async addCategory(spreadsheetId: string, cat: Category): Promise<void> {
     const values = [[cat.name, cat.description, cat.status]];
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Categories!A:C:append?valueInputOption=RAW`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values })
-      }
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.CATEGORIES}!A:C:append?valueInputOption=RAW`,
+      { method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ values }) }
     );
   }
 
   async updateCategory(spreadsheetId: string, rowIndex: number, cat: Category): Promise<void> {
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Categories!A${rowIndex}:C${rowIndex}?valueInputOption=RAW`,
-      {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [[cat.name, cat.description, cat.status]] })
-      }
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.CATEGORIES}!A${rowIndex}:C${rowIndex}?valueInputOption=RAW`,
+      { method: 'PUT', headers: this.jsonAuth, body: JSON.stringify({ values: [[cat.name, cat.description, cat.status]] }) }
     );
   }
 
   async deleteCategory(spreadsheetId: string, rowIndex: number): Promise<void> {
-    const sheetId = await this.getSheetNumericId(spreadsheetId, 'Categories');
+    const sheetId = await this.getSheetNumericId(spreadsheetId, SheetName.CATEGORIES);
     if (sheetId === null) return;
-    await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requests: [{
-            deleteDimension: {
-              range: {
-                sheetId,
-                dimension: 'ROWS',
-                startIndex: rowIndex - 1, // 0-indexed
-                endIndex: rowIndex
-              }
-            }
-          }]
-        })
-      }
-    );
+    await this.deleteRow(spreadsheetId, sheetId, rowIndex);
   }
 
   /** Batch-replaces all rows in Gastos!E where category === oldName with newName */
@@ -113,21 +85,16 @@ export class SheetsService {
 
     rows.forEach((row: string[], index: number) => {
       const rowNum = index + 2; // +2: row 1 is header, array is 0-indexed
-      const cat = row[GastosCol.CATEGORIA] ?? '';
-      if (cat === oldName) {
-        batchData.push({ range: `Gastos!E${rowNum}`, values: [[newName]] });
+      if ((row[GastosCol.CATEGORIA] ?? '') === oldName) {
+        batchData.push({ range: `${SheetName.GASTOS}!E${rowNum}`, values: [[newName]] });
       }
     });
 
     if (batchData.length === 0) return;
 
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ valueInputOption: 'RAW', data: batchData })
-      }
+      `${SHEETS_API}/${spreadsheetId}/values:batchUpdate`,
+      { method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ valueInputOption: 'RAW', data: batchData }) }
     );
   }
 
@@ -136,8 +103,8 @@ export class SheetsService {
   async getRules(spreadsheetId: string): Promise<Rule[]> {
     try {
       const response = await apiFetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Rules!A2:C1000`,
-        { headers: { Authorization: `Bearer ${this.accessToken}` } }
+        `${SHEETS_API}/${spreadsheetId}/values/${SheetName.RULES}!A2:C1000`,
+        { headers: this.auth }
       );
       const data: SheetsValuesResponse = await response.json();
       return (data.values ?? []).map((row: string[]) => ({
@@ -146,52 +113,44 @@ export class SheetsService {
         category: row[2] || 'Otros'
       }));
     } catch (err) {
-      if (err instanceof Error && err.message === '401') throw err;
-      console.error('[SheetsService] getRules failed:', err);
-      return [];
+      return catchNonAuth(err, '[SheetsService] getRules failed:', []);
     }
   }
 
   async addRule(spreadsheetId: string, rule: Rule): Promise<void> {
     const values = [[rule.pattern, rule.normalized, rule.category]];
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Rules!A:C:append?valueInputOption=RAW`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values })
-      }
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.RULES}!A:C:append?valueInputOption=RAW`,
+      { method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ values }) }
     );
   }
 
   async updateRule(spreadsheetId: string, rowIndex: number, rule: Rule): Promise<void> {
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Rules!A${rowIndex}:C${rowIndex}?valueInputOption=RAW`,
-      {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [[rule.pattern, rule.normalized, rule.category]] })
-      }
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.RULES}!A${rowIndex}:C${rowIndex}?valueInputOption=RAW`,
+      { method: 'PUT', headers: this.jsonAuth, body: JSON.stringify({ values: [[rule.pattern, rule.normalized, rule.category]] }) }
     );
   }
 
   async deleteRule(spreadsheetId: string, rowIndex: number): Promise<void> {
-    const sheetId = await this.getSheetNumericId(spreadsheetId, 'Rules');
+    const sheetId = await this.getSheetNumericId(spreadsheetId, SheetName.RULES);
     if (sheetId === null) return;
+    await this.deleteRow(spreadsheetId, sheetId, rowIndex);
+  }
+
+  // ─── HELPERS ──────────────────────────────────────────────────────────────
+
+  /** Deletes a single row by its 1-based index from a sheet identified by numeric ID. */
+  private async deleteRow(spreadsheetId: string, sheetId: number, rowIndex: number): Promise<void> {
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+      `${SHEETS_API}/${spreadsheetId}:batchUpdate`,
       {
         method: 'POST',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+        headers: this.jsonAuth,
         body: JSON.stringify({
           requests: [{
             deleteDimension: {
-              range: {
-                sheetId,
-                dimension: 'ROWS',
-                startIndex: rowIndex - 1,
-                endIndex: rowIndex
-              }
+              range: { sheetId, dimension: 'ROWS', startIndex: rowIndex - 1, endIndex: rowIndex }
             }
           }]
         })
@@ -199,21 +158,17 @@ export class SheetsService {
     );
   }
 
-  // ─── HELPERS ──────────────────────────────────────────────────────────────
-
   private async getSheetNumericId(spreadsheetId: string, sheetName: string): Promise<number | null> {
     try {
       const response = await apiFetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`,
-        { headers: { Authorization: `Bearer ${this.accessToken}` } }
+        `${SHEETS_API}/${spreadsheetId}?fields=sheets.properties`,
+        { headers: this.auth }
       );
       const data: SheetsMetadataResponse = await response.json();
       const sheet = (data.sheets ?? []).find(s => s.properties?.title === sheetName);
       return sheet?.properties?.sheetId ?? null;
     } catch (err) {
-      if (err instanceof Error && err.message === '401') throw err;
-      console.error(`[SheetsService] getSheetNumericId('${sheetName}') failed:`, err);
-      return null;
+      return catchNonAuth(err, `[SheetsService] getSheetNumericId('${sheetName}') failed:`, null);
     }
   }
 }

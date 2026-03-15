@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { Rule, Category, DashboardStats, LensType } from '../types';
 import { AIAnalysisView } from './AIAnalysisView';
-import { safeText, safeNum, COLORS, toLocalDateString } from '../lib/utils';
+import { safeText, safeNum, COLORS, toLocalDateString, aggregateByKey } from '../lib/utils';
 import { TOTAL_TICKET_MARKER, GastosCol } from '../lib/constants';
 
 interface Props {
@@ -79,24 +79,27 @@ export const LensesView: React.FC<Props> = ({
   }, [processedData]);
 
   const lensData = useMemo(() => {
+    const dataRows = processedData.filter((row: string[]) =>
+      row[GastosCol.PRODUCTO] && row[GastosCol.PRODUCTO] !== TOTAL_TICKET_MARKER
+    );
+
+    const colIndex = currentLens === 'stores' ? GastosCol.TIENDA
+      : currentLens === 'categories' ? GastosCol.CATEGORIA
+      : GastosCol.PRODUCTO;
+
+    const agg = aggregateByKey(
+      dataRows,
+      row => safeText(row[colIndex]),
+      row => safeNum(row[GastosCol.TOTAL_LINEA]),
+    );
+
+    // Ensure all active categories appear even with 0 spend
     if (currentLens === 'categories') {
-      const agg = new Map<string, number>(activeCategories.map(c => [c.name, 0]));
-      processedData.forEach((row: string[]) => {
-        if (row[GastosCol.PRODUCTO] === TOTAL_TICKET_MARKER || !row[GastosCol.PRODUCTO]) return;
-        const key = safeText(row[GastosCol.CATEGORIA]);
-        agg.set(key, (agg.get(key) ?? 0) + safeNum(row[GastosCol.TOTAL_LINEA]));
-      });
-      return Array.from(agg.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+      for (const c of activeCategories) {
+        if (!agg.has(c.name)) agg.set(c.name, 0);
+      }
     }
 
-    const agg = new Map<string, number>();
-    processedData.forEach((row: string[]) => {
-      let key = '';
-      if (currentLens === 'products') key = safeText(row[GastosCol.PRODUCTO]);
-      else if (currentLens === 'stores') key = safeText(row[GastosCol.TIENDA]);
-      if (safeText(row[GastosCol.PRODUCTO]) === TOTAL_TICKET_MARKER || !key) return;
-      agg.set(key, (agg.get(key) ?? 0) + safeNum(row[GastosCol.TOTAL_LINEA]));
-    });
     return Array.from(agg.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [processedData, currentLens, activeCategories]);
 

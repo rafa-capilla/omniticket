@@ -1,5 +1,7 @@
 
 import { apiFetch } from './apiFetch';
+import { GMAIL_API } from '../lib/constants';
+import { authHeaders, jsonAuthHeaders } from '../lib/utils';
 
 interface GmailThread {
   id: string;
@@ -81,10 +83,13 @@ export class GmailService {
 
   constructor(private accessToken: string) {}
 
+  private get auth()     { return authHeaders(this.accessToken); }
+  private get jsonAuth() { return jsonAuthHeaders(this.accessToken); }
+
   async searchThreads(query: string): Promise<string[]> {
     const response = await apiFetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${encodeURIComponent(query)}`,
-      { headers: { Authorization: `Bearer ${this.accessToken}` } }
+      `${GMAIL_API}/threads?q=${encodeURIComponent(query)}`,
+      { headers: this.auth }
     );
     const data: GmailThreadsResponse = await response.json();
     return (data.threads ?? []).map(t => t.id);
@@ -92,8 +97,8 @@ export class GmailService {
 
   async getThreadContent(threadId: string): Promise<string> {
     const response = await apiFetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}`,
-      { headers: { Authorization: `Bearer ${this.accessToken}` } }
+      `${GMAIL_API}/threads/${threadId}`,
+      { headers: this.auth }
     );
     const data: GmailThreadResponse = await response.json();
 
@@ -110,15 +115,8 @@ export class GmailService {
   async addLabelToThread(threadId: string, labelName: string): Promise<void> {
     const labelId = await this.getOrCreateLabel(labelName);
     await apiFetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}/modify`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ addLabelIds: [labelId] })
-      }
+      `${GMAIL_API}/threads/${threadId}/modify`,
+      { method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ addLabelIds: [labelId] }) }
     );
   }
 
@@ -126,10 +124,7 @@ export class GmailService {
     const cached = this.labelCache.get(name);
     if (cached !== undefined) return cached;
 
-    const response = await apiFetch(
-      'https://gmail.googleapis.com/gmail/v1/users/me/labels',
-      { headers: { Authorization: `Bearer ${this.accessToken}` } }
-    );
+    const response = await apiFetch(`${GMAIL_API}/labels`, { headers: this.auth });
     const data: GmailLabelsResponse = await response.json();
     const existing = (data.labels ?? []).find(l => l.name === name);
     if (existing) {
@@ -137,17 +132,11 @@ export class GmailService {
       return existing.id;
     }
 
-    const createResponse = await apiFetch(
-      'https://gmail.googleapis.com/gmail/v1/users/me/labels',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ name, labelListVisibility: 'labelShow', messageListVisibility: 'show' })
-      }
-    );
+    const createResponse = await apiFetch(`${GMAIL_API}/labels`, {
+      method: 'POST',
+      headers: this.jsonAuth,
+      body: JSON.stringify({ name, labelListVisibility: 'labelShow', messageListVisibility: 'show' })
+    });
     const created: GmailLabelResponse = await createResponse.json();
     this.labelCache.set(name, created.id);
     return created.id;

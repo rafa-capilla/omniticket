@@ -4,7 +4,7 @@ import { Category, AIAnalysisResult, AggregatedData } from '../types';
 import { AIAnalysisService } from '../services/AIAnalysisService';
 import { ConfigService } from '../services/ConfigService';
 import { useApp } from '../contexts/AppContext';
-import { safeText, safeNum, COLORS, getErrorMessage } from '../lib/utils';
+import { safeText, safeNum, COLORS, getErrorMessage, aggregateByKey } from '../lib/utils';
 import { TOTAL_TICKET_MARKER, GastosCol } from '../lib/constants';
 
 interface Props {
@@ -26,36 +26,37 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
   const [result, setResult] = useState<AIAnalysisResult | null>(null);
 
   const aggregatedData = useMemo((): AggregatedData => {
-    let totalSpent = 0;
-    let ticketCount = 0;
-    const catMap = new Map<string, number>();
-    const prodMap = new Map<string, number>();
-    const storeMap = new Map<string, number>();
-
-    const lineItems: string[] = [];
-
-    rawLines.forEach((row: string[]) => {
+    // Filter rows within date range
+    const inRange = rawLines.filter((row: string[]) => {
       const date = row[GastosCol.FECHA] ?? '';
-      if (date < dateRange.start || date > dateRange.end) return;
-
-      if (row[GastosCol.PRODUCTO] === TOTAL_TICKET_MARKER) {
-        totalSpent += safeNum(row[GastosCol.TOTAL_LINEA]);
-        ticketCount++;
-      } else {
-        const cat = safeText(row[GastosCol.CATEGORIA] ?? 'Otros');
-        const prod = safeText(row[GastosCol.NOMBRE_NORM] ?? '') || safeText(row[GastosCol.PRODUCTO] ?? '');
-        const store = safeText(row[GastosCol.TIENDA] ?? '');
-        const amount = safeNum(row[GastosCol.TOTAL_LINEA]);
-        catMap.set(cat, (catMap.get(cat) ?? 0) + amount);
-        if (prod) prodMap.set(prod, (prodMap.get(prod) ?? 0) + amount);
-        if (store) storeMap.set(store, (storeMap.get(store) ?? 0) + amount);
-        const cant = row[GastosCol.CANTIDAD] ?? '';
-        const pUnit = safeNum(row[GastosCol.PRECIO_UNIT]);
-        lineItems.push(`${date}|${store}|${prod}|${cat}|${cant}|${pUnit.toFixed(2)}€|${amount.toFixed(2)}€`);
-      }
+      return date >= dateRange.start && date <= dateRange.end;
     });
 
+    const totalRows = inRange.filter(row => row[GastosCol.PRODUCTO] === TOTAL_TICKET_MARKER);
+    const dataRows = inRange.filter(row => row[GastosCol.PRODUCTO] !== TOTAL_TICKET_MARKER);
+
+    const totalSpent = totalRows.reduce((sum, row) => sum + safeNum(row[GastosCol.TOTAL_LINEA]), 0);
+    const ticketCount = totalRows.length;
+
+    const catMap = aggregateByKey(dataRows, row => safeText(row[GastosCol.CATEGORIA] ?? 'Otros'), row => safeNum(row[GastosCol.TOTAL_LINEA]));
+    const prodMap = aggregateByKey(dataRows, row => safeText(row[GastosCol.NOMBRE_NORM] ?? '') || safeText(row[GastosCol.PRODUCTO] ?? ''), row => safeNum(row[GastosCol.TOTAL_LINEA]));
+    const storeMap = aggregateByKey(dataRows, row => safeText(row[GastosCol.TIENDA] ?? ''), row => safeNum(row[GastosCol.TOTAL_LINEA]));
+
     categories.forEach(c => { if (!catMap.has(c.name)) catMap.set(c.name, 0); });
+
+    const lineItems = dataRows.map((row: string[]) => {
+      const date = row[GastosCol.FECHA] ?? '';
+      const store = safeText(row[GastosCol.TIENDA] ?? '');
+      const prod = safeText(row[GastosCol.NOMBRE_NORM] ?? '') || safeText(row[GastosCol.PRODUCTO] ?? '');
+      const cat = safeText(row[GastosCol.CATEGORIA] ?? 'Otros');
+      const cant = row[GastosCol.CANTIDAD] ?? '';
+      const pUnit = safeNum(row[GastosCol.PRECIO_UNIT]);
+      const amount = safeNum(row[GastosCol.TOTAL_LINEA]);
+      return `${date}|${store}|${prod}|${cat}|${cant}|${pUnit.toFixed(2)}€|${amount.toFixed(2)}€`;
+    });
+
+    const mapToSorted = (m: Map<string, number>) =>
+      Array.from(m.entries()).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
 
     return {
       period: dateRange,
@@ -64,12 +65,8 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
       byCategory: Array.from(catMap.entries())
         .map(([name, total]) => ({ name, total, percentage: totalSpent > 0 ? (total / totalSpent) * 100 : 0 }))
         .sort((a, b) => b.total - a.total),
-      byProduct: Array.from(prodMap.entries())
-        .map(([name, total]) => ({ name, total }))
-        .sort((a, b) => b.total - a.total),
-      byStore: Array.from(storeMap.entries())
-        .map(([name, total]) => ({ name, total }))
-        .sort((a, b) => b.total - a.total),
+      byProduct: mapToSorted(prodMap),
+      byStore: mapToSorted(storeMap),
       lineItems,
     };
   }, [rawLines, dateRange, categories]);
