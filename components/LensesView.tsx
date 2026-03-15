@@ -1,9 +1,11 @@
 import React, { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
-import { Rule, Category, DashboardStats, LensType } from '../types';
+import { Rule, Category, LensType } from '../types';
 import { AIAnalysisView } from './AIAnalysisView';
-import { safeText, safeNum, COLORS, toLocalDateString, aggregateByKey, matchRule } from '../lib/utils';
-import { TOTAL_TICKET_MARKER, GastosCol } from '../lib/constants';
+import { safeText, COLORS, toLocalDateString } from '../lib/utils';
+import { GastosCol } from '../lib/constants';
+import { applyRulesToRows } from '../domain/services/RuleEngine';
+import { calculateKPIs, aggregateByLens, filterByDateRange } from '../domain/services/DataAggregator';
 
 interface Props {
   currentLens: LensType;
@@ -28,77 +30,19 @@ export const LensesView: React.FC<Props> = ({
   const activeCategories = useMemo(() => categories.filter(c => c.status === 'active'), [categories]);
 
   const processedData = useMemo(() => {
-    return rawLines
-      .filter((row: string[]) => {
-        const date = row[GastosCol.FECHA] ?? '';
-        return date >= dateRange.start && date <= dateRange.end;
-      })
-      .map((row: string[]) => {
-        const originalName = safeText(row[GastosCol.PRODUCTO] ?? '');
-        if (originalName === TOTAL_TICKET_MARKER || !originalName) return row;
-
-        const matchedRule = matchRule(originalName, rules);
-        const normalizedFromSync = safeText(row[GastosCol.NOMBRE_NORM] ?? '');
-        let normalizedName = normalizedFromSync || originalName;
-        let category = safeText(row[GastosCol.CATEGORIA] ?? 'Otros');
-
-        if (matchedRule) {
-          normalizedName = safeText(matchedRule.normalized);
-          category = safeText(matchedRule.category);
-        }
-
-        const newRow = [...row];
-        newRow[GastosCol.PRODUCTO] = normalizedName;
-        newRow[GastosCol.CATEGORIA] = category;
-        return newRow;
-      });
+    const filtered = filterByDateRange(rawLines, dateRange);
+    return applyRulesToRows(
+      filtered, rules,
+      GastosCol.PRODUCTO, GastosCol.CATEGORIA, GastosCol.NOMBRE_NORM,
+      '--- TOTAL TICKET ---',
+    );
   }, [rawLines, dateRange, rules]);
 
-  const stats: DashboardStats = useMemo(() => {
-    let total = 0;
-    let count = 0;
-    const catMap = new Map<string, number>();
-
-    processedData.forEach((row: string[]) => {
-      if (row[GastosCol.PRODUCTO] === TOTAL_TICKET_MARKER) {
-        total += safeNum(row[GastosCol.TOTAL_LINEA]);
-        count++;
-      } else {
-        const cat = safeText(row[GastosCol.CATEGORIA]);
-        catMap.set(cat, (catMap.get(cat) ?? 0) + safeNum(row[GastosCol.TOTAL_LINEA]));
-      }
-    });
-
-    let topCat = 'Ninguna';
-    let maxVal = -1;
-    catMap.forEach((v, k) => { if (v > maxVal) { maxVal = v; topCat = k; } });
-
-    return { totalSpent: total, avgTicket: count > 0 ? total / count : 0, topCategory: topCat, ticketCount: count };
-  }, [processedData]);
+  const stats = useMemo(() => calculateKPIs(processedData), [processedData]);
 
   const lensData = useMemo(() => {
-    const dataRows = processedData.filter((row: string[]) =>
-      row[GastosCol.PRODUCTO] && row[GastosCol.PRODUCTO] !== TOTAL_TICKET_MARKER
-    );
-
-    const colIndex = currentLens === 'stores' ? GastosCol.TIENDA
-      : currentLens === 'categories' ? GastosCol.CATEGORIA
-      : GastosCol.PRODUCTO;
-
-    const agg = aggregateByKey(
-      dataRows,
-      row => safeText(row[colIndex]),
-      row => safeNum(row[GastosCol.TOTAL_LINEA]),
-    );
-
-    // Ensure all active categories appear even with 0 spend
-    if (currentLens === 'categories') {
-      for (const c of activeCategories) {
-        if (!agg.has(c.name)) agg.set(c.name, 0);
-      }
-    }
-
-    return Array.from(agg.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+    if (currentLens === 'analysis') return [];
+    return aggregateByLens(processedData, currentLens, activeCategories);
   }, [processedData, currentLens, activeCategories]);
 
   return (

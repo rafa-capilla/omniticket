@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
-import { Category, AIAnalysisResult, AggregatedData } from '../types';
+import { Category, AIAnalysisResult } from '../types';
 import { AIAnalysisService } from '../services/AIAnalysisService';
 import { ConfigService } from '../services/ConfigService';
 import { useApp } from '../contexts/AppContext';
-import { safeText, safeNum, COLORS, getErrorMessage, aggregateByKey } from '../lib/utils';
-import { TOTAL_TICKET_MARKER, GastosCol } from '../lib/constants';
+import { COLORS, getErrorMessage } from '../lib/utils';
+import { buildAggregatedData } from '../domain/services/DataAggregator';
 
 interface Props {
   rawLines: string[][];
@@ -25,51 +25,10 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<AIAnalysisResult | null>(null);
 
-  const aggregatedData = useMemo((): AggregatedData => {
-    // Filter rows within date range
-    const inRange = rawLines.filter((row: string[]) => {
-      const date = row[GastosCol.FECHA] ?? '';
-      return date >= dateRange.start && date <= dateRange.end;
-    });
-
-    const totalRows = inRange.filter(row => row[GastosCol.PRODUCTO] === TOTAL_TICKET_MARKER);
-    const dataRows = inRange.filter(row => row[GastosCol.PRODUCTO] !== TOTAL_TICKET_MARKER);
-
-    const totalSpent = totalRows.reduce((sum, row) => sum + safeNum(row[GastosCol.TOTAL_LINEA]), 0);
-    const ticketCount = totalRows.length;
-
-    const catMap = aggregateByKey(dataRows, row => safeText(row[GastosCol.CATEGORIA] ?? 'Otros'), row => safeNum(row[GastosCol.TOTAL_LINEA]));
-    const prodMap = aggregateByKey(dataRows, row => safeText(row[GastosCol.NOMBRE_NORM] ?? '') || safeText(row[GastosCol.PRODUCTO] ?? ''), row => safeNum(row[GastosCol.TOTAL_LINEA]));
-    const storeMap = aggregateByKey(dataRows, row => safeText(row[GastosCol.TIENDA] ?? ''), row => safeNum(row[GastosCol.TOTAL_LINEA]));
-
-    categories.forEach(c => { if (!catMap.has(c.name)) catMap.set(c.name, 0); });
-
-    const lineItems = dataRows.map((row: string[]) => {
-      const date = row[GastosCol.FECHA] ?? '';
-      const store = safeText(row[GastosCol.TIENDA] ?? '');
-      const prod = safeText(row[GastosCol.NOMBRE_NORM] ?? '') || safeText(row[GastosCol.PRODUCTO] ?? '');
-      const cat = safeText(row[GastosCol.CATEGORIA] ?? 'Otros');
-      const cant = row[GastosCol.CANTIDAD] ?? '';
-      const pUnit = safeNum(row[GastosCol.PRECIO_UNIT]);
-      const amount = safeNum(row[GastosCol.TOTAL_LINEA]);
-      return `${date}|${store}|${prod}|${cat}|${cant}|${pUnit.toFixed(2)}€|${amount.toFixed(2)}€`;
-    });
-
-    const mapToSorted = (m: Map<string, number>) =>
-      Array.from(m.entries()).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
-
-    return {
-      period: dateRange,
-      totalSpent,
-      ticketCount,
-      byCategory: Array.from(catMap.entries())
-        .map(([name, total]) => ({ name, total, percentage: totalSpent > 0 ? (total / totalSpent) * 100 : 0 }))
-        .sort((a, b) => b.total - a.total),
-      byProduct: mapToSorted(prodMap),
-      byStore: mapToSorted(storeMap),
-      lineItems,
-    };
-  }, [rawLines, dateRange, categories]);
+  const aggregatedData = useMemo(
+    () => buildAggregatedData(rawLines, dateRange, categories),
+    [rawLines, dateRange, categories],
+  );
 
   const handleAnalyze = async () => {
     if (!prompt.trim()) return;

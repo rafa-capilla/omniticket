@@ -2,45 +2,13 @@
 import { apiFetch } from './apiFetch';
 import { GMAIL_API } from '../lib/constants';
 import { authHeaders, jsonAuthHeaders } from '../lib/utils';
-
-interface GmailThread {
-  id: string;
-}
-
-interface GmailLabel {
-  id: string;
-  name: string;
-}
-
-interface GmailPayload {
-  mimeType?: string;
-  body?: { data?: string };
-  parts?: GmailPayload[];
-}
-
-interface GmailMessage {
-  payload?: GmailPayload;
-}
-
-/** Gmail threads.list */
-interface GmailThreadsResponse {
-  threads?: GmailThread[];
-}
-
-/** Gmail threads.get */
-interface GmailThreadResponse {
-  messages?: GmailMessage[];
-}
-
-/** Gmail labels.list */
-interface GmailLabelsResponse {
-  labels?: GmailLabel[];
-}
-
-/** Gmail labels.create */
-interface GmailLabelResponse {
-  id: string;
-}
+import type {
+  GmailPayload,
+  GmailThreadsResponse,
+  GmailThreadResponse,
+  GmailLabelsResponse,
+  GmailLabelResponse,
+} from '../shared/types/google-api';
 
 /**
  * Extrae texto de un payload de Gmail de forma recursiva.
