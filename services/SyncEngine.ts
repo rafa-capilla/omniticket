@@ -6,8 +6,7 @@ import { ConfigService } from "./ConfigService";
 import { ticketSchema } from "../schemas/ticketSchema";
 import { withRetry } from "./retry";
 import { SyncResult, TicketData, OmniSettings, Category, Rule } from "../types";
-import { DEFAULT_CATEGORY_NAMES } from "../lib/constants";
-import { getErrorMessage, roundCurrency } from "../lib/utils";
+import { getErrorMessage, roundCurrency, matchRule, getActiveCategories } from "../lib/utils";
 
 /**
  * Motor de sincronización principal de OmniTicket.
@@ -122,10 +121,7 @@ export class SyncEngine {
 
   /** Resolves the active category list, falling back to defaults if none are active. */
   private resolveActiveCategories(categories: Category[]): Category[] {
-    const active = categories.filter(c => c.status === 'active');
-    return active.length > 0
-      ? active
-      : DEFAULT_CATEGORY_NAMES.map(name => ({ name, description: '', status: 'active' as const }));
+    return getActiveCategories(categories);
   }
 
   /** Calls Gemini AI to extract structured ticket data from email content. */
@@ -221,9 +217,7 @@ export class SyncEngine {
   private applyUserRules(ticketData: TicketData, rules: Rule[], categories: Category[]): void {
     const validCategoryNames = new Set(categories.map(c => c.name));
     for (const item of ticketData.items) {
-      const match = rules.find(r =>
-        r.pattern && item.nombre.toLowerCase().includes(r.pattern.toLowerCase())
-      );
+      const match = matchRule(item.nombre, rules);
       if (match) {
         item.nombre_normalizado = match.normalized;
         item.categoria = match.category;

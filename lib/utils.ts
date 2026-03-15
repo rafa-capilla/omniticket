@@ -1,3 +1,6 @@
+import { Rule, Category } from '../types';
+import { DEFAULT_CATEGORY_NAMES } from './constants';
+
 export const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
 
 /** Formats a Date as YYYY-MM-DD using local timezone (no UTC shift). */
@@ -56,4 +59,27 @@ export function aggregateByKey<T>(
     if (key) map.set(key, (map.get(key) ?? 0) + valueFn(item));
   }
   return map;
+}
+
+/**
+ * Finds the first rule whose pattern matches the given product name (case-insensitive contains).
+ * Single source of truth for rule matching — used by both SyncEngine (at write time)
+ * and LensesView (at read time).
+ */
+export function matchRule(productName: string, rules: Rule[]): Rule | undefined {
+  if (!productName) return undefined;
+  const lower = productName.toLowerCase();
+  return rules.find(r => r.pattern && lower.includes(r.pattern.toLowerCase()));
+}
+
+/**
+ * Returns the list of active categories, falling back to the default set
+ * when no active user-defined categories exist.
+ * Consolidates the repeated filter-then-fallback pattern across components and services.
+ */
+export function getActiveCategories(categories: Category[]): Category[] {
+  const active = categories.filter(c => c.status === 'active');
+  return active.length > 0
+    ? active
+    : DEFAULT_CATEGORY_NAMES.map(name => ({ name, description: '', status: 'active' as const }));
 }

@@ -2,8 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Rule, Category } from '../types';
 import { SheetsService } from '../services/SheetsService';
 import { useApp } from '../contexts/AppContext';
-import { safeText, getErrorMessage } from '../lib/utils';
-import { DEFAULT_CATEGORY_NAMES } from '../lib/constants';
+import { safeText, getErrorMessage, getActiveCategories } from '../lib/utils';
 
 interface Props {
   rules: Rule[];
@@ -13,12 +12,10 @@ interface Props {
 export const RulesView: React.FC<Props> = ({ rules, categories }) => {
   const { token, dbId, toast, loadData } = useApp();
 
-  const categoryOptions = useMemo(() => {
-    const active = categories.filter(c => c.status === 'active');
-    return active.length > 0
-      ? active.map(c => c.name)
-      : [...DEFAULT_CATEGORY_NAMES];
-  }, [categories]);
+  const categoryOptions = useMemo(
+    () => getActiveCategories(categories).map(c => c.name),
+    [categories],
+  );
 
   const defaultCategory = categoryOptions[0] ?? 'Otros';
   const [newRule, setNewRule] = useState<Rule>({ pattern: '', normalized: '', category: defaultCategory });
