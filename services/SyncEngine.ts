@@ -3,10 +3,11 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { GmailService } from "./GmailService";
 import { SheetsService } from "./SheetsService";
 import { ConfigService } from "./ConfigService";
-import { ticketSchema } from "../schemas/ticketSchema";
 import { withRetry } from "./retry";
 import { SyncResult, TicketData, OmniSettings, Category, Rule } from "../types";
-import { getErrorMessage, roundCurrency, matchRule, getActiveCategories } from "../lib/utils";
+import { getErrorMessage, getActiveCategories } from "../lib/utils";
+import { validateTicketData, recalculateLineTotals } from "../domain/services/TicketValidator";
+import { applyRulesToItems } from "../domain/services/RuleEngine";
 
 /**
  * Motor de sincronización principal de OmniTicket.
@@ -112,9 +113,9 @@ export class SyncEngine {
 
     const categoriesToUse = this.resolveActiveCategories(categories);
     const rawJson = await this.callGeminiExtraction(apiKey, emailContent, uuid, categoriesToUse);
-    const ticketData = this.parseAndValidateResponse(rawJson, uuid);
-    this.recalculateLineTotals(ticketData);
-    this.applyUserRules(ticketData, rules, categoriesToUse);
+    const ticketData = validateTicketData(rawJson, uuid);
+    recalculateLineTotals(ticketData);
+    applyRulesToItems(ticketData.items, rules, categoriesToUse);
 
     return ticketData;
   }
@@ -195,36 +196,4 @@ export class SyncEngine {
     }
   }
 
-  /** Validates the raw Gemini response against the Zod schema. */
-  private parseAndValidateResponse(rawJson: unknown, uuid: string): TicketData {
-    try {
-      const base = (rawJson !== null && typeof rawJson === 'object') ? rawJson : {};
-      return ticketSchema.parse({ ...base, id: uuid });
-    } catch (e: unknown) {
-      console.error("Fallo en validación Zod:", e);
-      throw new Error(`Datos de IA inválidos: ${getErrorMessage(e)}`);
-    }
-  }
-
-  /** Recalculates precio_total_linea to always be net (precio_unitario * cantidad - descuento). */
-  private recalculateLineTotals(ticketData: TicketData): void {
-    for (const item of ticketData.items) {
-      item.precio_total_linea = roundCurrency((item.precio_unitario * item.cantidad) - item.descuento);
-    }
-  }
-
-  /** Applies user rules (highest priority) and validates categories. */
-  private applyUserRules(ticketData: TicketData, rules: Rule[], categories: Category[]): void {
-    const validCategoryNames = new Set(categories.map(c => c.name));
-    for (const item of ticketData.items) {
-      const match = matchRule(item.nombre, rules);
-      if (match) {
-        item.nombre_normalizado = match.normalized;
-        item.categoria = match.category;
-      }
-      if (!validCategoryNames.has(item.categoria)) {
-        item.categoria = 'Otros';
-      }
-    }
-  }
 }

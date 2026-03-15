@@ -1,174 +1,71 @@
 
-import { TicketData, Rule, Category, SheetsValuesResponse, SheetsMetadataResponse } from '../types';
-import { TOTAL_TICKET_MARKER, GastosCol, SHEETS_API, SheetName } from '../lib/constants';
-import { authHeaders, jsonAuthHeaders, catchNonAuth } from '../lib/utils';
-import { apiFetch } from './apiFetch';
+import { TicketData, Rule, Category } from '../types';
+import { SheetsExpenseRepo } from '../infrastructure/google-api/SheetsExpenseRepo';
+import { SheetsCategoryRepo } from '../infrastructure/google-api/SheetsCategoryRepo';
+import { SheetsRuleRepo } from '../infrastructure/google-api/SheetsRuleRepo';
 
+/**
+ * Facade that delegates to specialized repositories.
+ * Maintains the original public API for backward compatibility.
+ */
 export class SheetsService {
-  constructor(private accessToken: string) {}
+  private readonly expenses: SheetsExpenseRepo;
+  private readonly categories: SheetsCategoryRepo;
+  private readonly rules: SheetsRuleRepo;
 
-  private get auth()     { return authHeaders(this.accessToken); }
-  private get jsonAuth() { return jsonAuthHeaders(this.accessToken); }
+  constructor(accessToken: string) {
+    this.expenses = new SheetsExpenseRepo(accessToken);
+    this.categories = new SheetsCategoryRepo(accessToken);
+    this.rules = new SheetsRuleRepo(accessToken);
+  }
 
   // ─── GASTOS ───────────────────────────────────────────────────────────────
 
   async appendExpense(spreadsheetId: string, data: TicketData): Promise<void> {
-    const itemRows = data.items.map(item => [
-      data.id, data.tienda, data.fecha,
-      item.nombre, item.categoria,
-      item.cantidad, item.precio_unitario, item.descuento, item.precio_total_linea,
-      item.nombre_normalizado ?? ''
-    ]);
-    const totalRow = [
-      data.id, data.tienda, data.fecha, TOTAL_TICKET_MARKER, 'TOTAL', '', '', '', data.total_ticket, ''
-    ];
-    const values = [...itemRows, totalRow];
-    await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.GASTOS}!A:J:append?valueInputOption=USER_ENTERED`,
-      { method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ values }) }
-    );
+    return this.expenses.appendExpense(spreadsheetId, data);
   }
 
   async fetchAllLineItems(spreadsheetId: string): Promise<string[][]> {
-    const response = await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.GASTOS}!A2:J`,
-      { headers: this.auth }
-    );
-    const data: SheetsValuesResponse = await response.json();
-    return data.values ?? [];
+    return this.expenses.fetchAllLineItems(spreadsheetId);
   }
 
   // ─── CATEGORIES ───────────────────────────────────────────────────────────
 
   async getCategories(spreadsheetId: string): Promise<Category[]> {
-    try {
-      const response = await apiFetch(
-        `${SHEETS_API}/${spreadsheetId}/values/${SheetName.CATEGORIES}!A2:C1000`,
-        { headers: this.auth }
-      );
-      const data: SheetsValuesResponse = await response.json();
-      return (data.values ?? []).map((row: string[]) => ({
-        name: String(row[0] || ''),
-        description: String(row[1] || ''),
-        status: String(row[2] || '').toLowerCase() === 'inactive' ? 'inactive' as const : 'active' as const,
-      })).filter((c: Category) => c.name);
-    } catch (err) {
-      return catchNonAuth(err, '[SheetsService] getCategories failed:', []);
-    }
+    return this.categories.getCategories(spreadsheetId);
   }
 
   async addCategory(spreadsheetId: string, cat: Category): Promise<void> {
-    const values = [[cat.name, cat.description, cat.status]];
-    await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.CATEGORIES}!A:C:append?valueInputOption=RAW`,
-      { method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ values }) }
-    );
+    return this.categories.addCategory(spreadsheetId, cat);
   }
 
   async updateCategory(spreadsheetId: string, rowIndex: number, cat: Category): Promise<void> {
-    await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.CATEGORIES}!A${rowIndex}:C${rowIndex}?valueInputOption=RAW`,
-      { method: 'PUT', headers: this.jsonAuth, body: JSON.stringify({ values: [[cat.name, cat.description, cat.status]] }) }
-    );
+    return this.categories.updateCategory(spreadsheetId, rowIndex, cat);
   }
 
   async deleteCategory(spreadsheetId: string, rowIndex: number): Promise<void> {
-    const sheetId = await this.getSheetNumericId(spreadsheetId, SheetName.CATEGORIES);
-    if (sheetId === null) return;
-    await this.deleteRow(spreadsheetId, sheetId, rowIndex);
+    return this.categories.deleteCategory(spreadsheetId, rowIndex);
   }
 
-  /** Batch-replaces all rows in Gastos!E where category === oldName with newName */
   async updateCategoryInGastos(spreadsheetId: string, oldName: string, newName: string): Promise<void> {
-    const rows = await this.fetchAllLineItems(spreadsheetId);
-    const batchData: { range: string; values: string[][] }[] = [];
-
-    rows.forEach((row: string[], index: number) => {
-      const rowNum = index + 2; // +2: row 1 is header, array is 0-indexed
-      if ((row[GastosCol.CATEGORIA] ?? '') === oldName) {
-        batchData.push({ range: `${SheetName.GASTOS}!E${rowNum}`, values: [[newName]] });
-      }
-    });
-
-    if (batchData.length === 0) return;
-
-    await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values:batchUpdate`,
-      { method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ valueInputOption: 'RAW', data: batchData }) }
-    );
+    return this.categories.updateCategoryInGastos(spreadsheetId, oldName, newName);
   }
 
   // ─── RULES ────────────────────────────────────────────────────────────────
 
   async getRules(spreadsheetId: string): Promise<Rule[]> {
-    try {
-      const response = await apiFetch(
-        `${SHEETS_API}/${spreadsheetId}/values/${SheetName.RULES}!A2:C1000`,
-        { headers: this.auth }
-      );
-      const data: SheetsValuesResponse = await response.json();
-      return (data.values ?? []).map((row: string[]) => ({
-        pattern: row[0] || '',
-        normalized: row[1] || '',
-        category: row[2] || 'Otros'
-      }));
-    } catch (err) {
-      return catchNonAuth(err, '[SheetsService] getRules failed:', []);
-    }
+    return this.rules.getRules(spreadsheetId);
   }
 
   async addRule(spreadsheetId: string, rule: Rule): Promise<void> {
-    const values = [[rule.pattern, rule.normalized, rule.category]];
-    await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.RULES}!A:C:append?valueInputOption=RAW`,
-      { method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ values }) }
-    );
+    return this.rules.addRule(spreadsheetId, rule);
   }
 
   async updateRule(spreadsheetId: string, rowIndex: number, rule: Rule): Promise<void> {
-    await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.RULES}!A${rowIndex}:C${rowIndex}?valueInputOption=RAW`,
-      { method: 'PUT', headers: this.jsonAuth, body: JSON.stringify({ values: [[rule.pattern, rule.normalized, rule.category]] }) }
-    );
+    return this.rules.updateRule(spreadsheetId, rowIndex, rule);
   }
 
   async deleteRule(spreadsheetId: string, rowIndex: number): Promise<void> {
-    const sheetId = await this.getSheetNumericId(spreadsheetId, SheetName.RULES);
-    if (sheetId === null) return;
-    await this.deleteRow(spreadsheetId, sheetId, rowIndex);
-  }
-
-  // ─── HELPERS ──────────────────────────────────────────────────────────────
-
-  /** Deletes a single row by its 1-based index from a sheet identified by numeric ID. */
-  private async deleteRow(spreadsheetId: string, sheetId: number, rowIndex: number): Promise<void> {
-    await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}:batchUpdate`,
-      {
-        method: 'POST',
-        headers: this.jsonAuth,
-        body: JSON.stringify({
-          requests: [{
-            deleteDimension: {
-              range: { sheetId, dimension: 'ROWS', startIndex: rowIndex - 1, endIndex: rowIndex }
-            }
-          }]
-        })
-      }
-    );
-  }
-
-  private async getSheetNumericId(spreadsheetId: string, sheetName: string): Promise<number | null> {
-    try {
-      const response = await apiFetch(
-        `${SHEETS_API}/${spreadsheetId}?fields=sheets.properties`,
-        { headers: this.auth }
-      );
-      const data: SheetsMetadataResponse = await response.json();
-      const sheet = (data.sheets ?? []).find(s => s.properties?.title === sheetName);
-      return sheet?.properties?.sheetId ?? null;
-    } catch (err) {
-      return catchNonAuth(err, `[SheetsService] getSheetNumericId('${sheetName}') failed:`, null);
-    }
+    return this.rules.deleteRule(spreadsheetId, rowIndex);
   }
 }
