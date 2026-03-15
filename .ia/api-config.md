@@ -147,30 +147,7 @@ POST https://sheets.googleapis.com/v4/spreadsheets/{id}:batchUpdate  (para añad
 
 ### Estructura de Hojas
 
-#### Config (A1:B)
-| Clave | Valor |
-|-------|-------|
-| GMAIL_SEARCH_LABEL | "OmniTicket" |
-| GMAIL_PROCESSED_LABEL | "OmniTicket/Procesado" |
-| GEMINI_API_KEY | "" |
-
-#### Gastos (A1:J1 header + datos) — 10 columnas
-| ID Ticket | Tienda | Fecha | Producto | Categoría | P. Unitario | Cantidad | Unidad | Total Línea | Nombre Normalizado |
-|-----------|--------|-------|----------|-----------|-------------|----------|--------|-------------|-------------------|
-| Col A | Col B | Col C | Col D | Col E | Col F | Col G | Col H | Col I | Col J |
-
-> La última columna (J) contiene el nombre normalizado por Gemini. Se usa en las lentes de análisis.
-
-#### Historial (A1:... header + datos)
-Resumen de tickets: id, fecha, tienda, total, estado
-
-#### Rules (A1:C1 header + datos)
-| pattern | normalized | category |
-|---------|-----------|----------|
-
-#### Categorias (A1:C1 header + datos)
-| name | description | status |
-|------|-------------|--------|
+> Ver schema completo de todas las hojas en `business-rules.md` → "Almacenamiento en Spreadsheet"
 
 ### Formato de Append para Gastos
 ```text
@@ -199,7 +176,7 @@ name = 'OmniTicket_DB' and mimeType = 'application/vnd.google-apps.spreadsheet' 
 ## Gemini AI API
 
 ### Configuración
-- **Librería**: `@google/genai` v1.41.0
+- **Librería**: `@google/genai` 1.41.0
 - **Modelo**: `gemini-2.5-pro`
 - **API Key**: Se lee en tiempo de ejecución del spreadsheet (`settings.GEMINI_API_KEY` via `ConfigService.getSettings()`). **No se usan variables de entorno.**
 - **Inicialización**: `new GoogleGenAI({ apiKey: settings.GEMINI_API_KEY })`
