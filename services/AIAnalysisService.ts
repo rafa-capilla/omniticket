@@ -1,15 +1,16 @@
 /**
- * Facade that delegates to GeminiGateway for backward compatibility.
- * @see infrastructure/google-api/GeminiGateway.ts
+ * Facade that delegates to the AnalyzeExpenses use case for backward compatibility.
+ * @see application/use-cases/AnalyzeExpenses.ts
  */
 
 import { AggregatedData, AIAnalysisResult } from "../types";
 import { GeminiGateway } from '../infrastructure/google-api/GeminiGateway';
+import { AnalyzeExpenses } from '../application/use-cases/AnalyzeExpenses';
 
 export class AIAnalysisService {
-  private readonly gateway = new GeminiGateway();
+  private readonly useCase = new AnalyzeExpenses(new GeminiGateway());
 
   async analyze(prompt: string, data: AggregatedData, apiKey: string): Promise<AIAnalysisResult> {
-    return this.gateway.analyzeExpenses(prompt, data, apiKey);
+    return this.useCase.execute(prompt, data, apiKey);
   }
 }
