@@ -1,13 +1,11 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
 import { GmailService } from "./GmailService";
 import { SheetsService } from "./SheetsService";
 import { ConfigService } from "./ConfigService";
 import { withRetry } from "./retry";
-import { SyncResult, TicketData, OmniSettings, Category, Rule } from "../types";
-import { getErrorMessage, getActiveCategories } from "../lib/utils";
-import { validateTicketData, recalculateLineTotals } from "../domain/services/TicketValidator";
-import { applyRulesToItems } from "../domain/services/RuleEngine";
+import { GeminiGateway } from "../infrastructure/google-api/GeminiGateway";
+import { SyncResult, Category, Rule } from "../types";
+import { getErrorMessage } from "../lib/utils";
 
 /**
  * Motor de sincronización principal de OmniTicket.
@@ -21,11 +19,13 @@ export class SyncEngine {
   private gmail: GmailService;
   private sheets: SheetsService;
   private config: ConfigService;
+  private gemini: GeminiGateway;
 
   constructor(private accessToken: string) {
     this.gmail = new GmailService(accessToken);
     this.sheets = new SheetsService(accessToken);
     this.config = new ConfigService(accessToken);
+    this.gemini = new GeminiGateway();
   }
 
   async runSync(onProgress?: (msg: string) => void): Promise<SyncResult[]> {
@@ -60,7 +60,7 @@ export class SyncEngine {
 
         onProgress?.(`Analizando con Gemini ${ticketNum}...`);
         const ticketData = await withRetry(
-          () => this.extractDataWithAI(content, ticketUuid, settings, categories, rules),
+          () => this.gemini.extractTicketData(content, ticketUuid, settings.GEMINI_API_KEY, categories, rules),
         );
 
         onProgress?.(`Guardando en Sheets ${ticketNum}...`);
@@ -93,107 +93,4 @@ export class SyncEngine {
 
     return results;
   }
-
-  /**
-   * Extrae datos estructurados del email con Gemini AI.
-   * Incluye normalización de nombres y categorización dinámica.
-   * Aplica reglas del usuario como post-proceso (mayor prioridad que Gemini).
-   */
-  private async extractDataWithAI(
-    emailContent: string,
-    uuid: string,
-    settings: OmniSettings,
-    categories: Category[],
-    rules: Rule[]
-  ): Promise<TicketData> {
-    const apiKey = settings.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY no configurada en el Spreadsheet (Settings!B3). Por favor, configúrala en la hoja Settings.");
-    }
-
-    const categoriesToUse = this.resolveActiveCategories(categories);
-    const rawJson = await this.callGeminiExtraction(apiKey, emailContent, uuid, categoriesToUse);
-    const ticketData = validateTicketData(rawJson, uuid);
-    recalculateLineTotals(ticketData);
-    applyRulesToItems(ticketData.items, rules, categoriesToUse);
-
-    return ticketData;
-  }
-
-  /** Resolves the active category list, falling back to defaults if none are active. */
-  private resolveActiveCategories(categories: Category[]): Category[] {
-    return getActiveCategories(categories);
-  }
-
-  /** Calls Gemini AI to extract structured ticket data from email content. */
-  private async callGeminiExtraction(
-    apiKey: string,
-    emailContent: string,
-    uuid: string,
-    categories: Category[]
-  ): Promise<unknown> {
-    const categoryList = categories
-      .map(c => c.description ? `- ${c.name}: ${c.description}` : `- ${c.name}`)
-      .join('\n');
-
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
-      contents: `Analiza el contenido de este email y extrae los datos del ticket de compra.
-      UUID para el ticket: ${uuid}
-
-      CONTENIDO DEL EMAIL:
-      ---
-      ${emailContent}
-      ---`,
-      config: {
-        systemInstruction: `Eres un asistente experto en contabilidad. Tu tarea es extraer datos estructurados de tickets de compra (supermercados, tiendas, etc).
-        REGLAS:
-        1. Tienda: Nombre comercial limpio (sin direcciones ni códigos).
-        2. Fecha: Formato YYYY-MM-DD. Si no hay año, asume el año actual.
-        3. Items: Extrae cada línea de producto. Limpia nombres raros (ej: "PROD 250G" → "Producto 250g").
-        4. Categorías permitidas (usa EXACTAMENTE estos nombres):
-        ${categoryList}
-        Si no estás seguro de la categoría, usa "Otros".
-        5. Totales: Asegura que la suma de items coincida con total_ticket.
-        6. Si hay descuentos, ponlos en el campo 'descuento' (valor positivo).
-        7. nombre_normalizado: Para cada producto genera un nombre simplificado (máximo 3 palabras, sin códigos de producto, en Title Case). Ej: "COCA COLA ZERO 2L PET" → "Coca Cola Zero".`,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.STRING },
-            tienda: { type: Type.STRING },
-            fecha: { type: Type.STRING },
-            items: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  nombre: { type: Type.STRING },
-                  nombre_normalizado: { type: Type.STRING },
-                  categoria: { type: Type.STRING },
-                  precio_unitario: { type: Type.NUMBER },
-                  cantidad: { type: Type.NUMBER },
-                  descuento: { type: Type.NUMBER },
-                  precio_total_linea: { type: Type.NUMBER }
-                },
-                required: ["nombre", "nombre_normalizado", "categoria", "precio_unitario", "cantidad", "precio_total_linea"]
-              }
-            },
-            total_ticket: { type: Type.NUMBER }
-          },
-          required: ["id", "tienda", "fecha", "items", "total_ticket"]
-        }
-      }
-    });
-
-    try {
-      return JSON.parse(response.text || "{}");
-    } catch (e: unknown) {
-      console.error("Fallo al parsear JSON de Gemini:", response.text, e);
-      throw new Error(`Respuesta de Gemini no es JSON válido: ${getErrorMessage(e)}`);
-    }
-  }
-
 }

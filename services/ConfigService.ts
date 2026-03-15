@@ -1,39 +1,27 @@
-import { OmniSettings, SettingKey, SheetsValuesResponse, SheetsMetadataResponse, DriveFilesResponse } from '../types';
-import { TOTAL_TICKET_MARKER, GastosCol, SHEETS_API, DRIVE_API, SheetName } from '../lib/constants';
-import { apiFetch } from './apiFetch';
-import { safeNum, authHeaders, jsonAuthHeaders } from '../lib/utils';
-
-const DEFAULT_CATEGORIES = [
-  ['Lácteos', 'Leche, yogures, quesos, mantequilla, nata', 'active'],
-  ['Carne', 'Carne roja, pollo, pescado, embutidos', 'active'],
-  ['Fruta/Verdura', 'Frutas frescas, verduras, hortalizas, legumbres frescas', 'active'],
-  ['Limpieza', 'Productos de limpieza del hogar, detergentes, lejía', 'active'],
-  ['Bebidas', 'Agua, refrescos, zumos, alcohol, café, té', 'active'],
-  ['Higiene', 'Productos de higiene personal: jabón, champú, pasta de dientes', 'active'],
-  ['Otros', 'Todo lo que no encaje en otras categorías', 'active'],
-];
+import { OmniSettings, SettingKey } from '../types';
+import { SheetsConfigRepo } from '../infrastructure/google-api/SheetsConfigRepo';
+import { DatabaseBootstrap } from '../infrastructure/bootstrap/DatabaseBootstrap';
+import { runMigrations } from '../infrastructure/bootstrap/migrations';
 
 /**
  * Servicio de gestión de configuración persistente en Google Sheets.
+ * Facade that delegates to SheetsConfigRepo (settings) and DatabaseBootstrap (creation/migrations).
  */
 export class ConfigService {
-  private static readonly FILENAME = 'OmniTicket_DB';
   private spreadsheetId: string | null = null;
+  private readonly configRepo: SheetsConfigRepo;
+  private readonly bootstrap: DatabaseBootstrap;
 
-  constructor(private accessToken: string) {}
-
-  private get auth()     { return authHeaders(this.accessToken); }
-  private get jsonAuth() { return jsonAuthHeaders(this.accessToken); }
+  constructor(private accessToken: string) {
+    this.configRepo = new SheetsConfigRepo(accessToken);
+    this.bootstrap = new DatabaseBootstrap(accessToken);
+  }
 
   async getOrFindId(): Promise<string> {
     if (this.spreadsheetId) return this.spreadsheetId;
-    const q = encodeURIComponent(`name = '${ConfigService.FILENAME}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`);
-    const response = await apiFetch(`${DRIVE_API}?q=${q}`, { headers: this.auth });
-    const data: DriveFilesResponse = await response.json();
-    const fileId = data.files?.[0]?.id;
-    if (!fileId) throw new Error("NOT_FOUND");
-    this.spreadsheetId = String(fileId);
-    return this.spreadsheetId;
+    const id = await this.bootstrap.findSpreadsheet();
+    this.spreadsheetId = id;
+    return id;
   }
 
   /**
@@ -48,190 +36,23 @@ export class ConfigService {
       if (e instanceof Error && e.message === "401") throw e;
       if (!(e instanceof Error) || e.message !== "NOT_FOUND") throw e;
 
-      const spreadsheet = {
-        properties: { title: ConfigService.FILENAME },
-        sheets: [
-          { properties: { title: SheetName.SETTINGS } },
-          { properties: { title: SheetName.GASTOS, gridProperties: { frozenRowCount: 1 } } },
-          { properties: { title: SheetName.RULES, gridProperties: { frozenRowCount: 1 } } },
-        ]
-      };
-      const response = await apiFetch(SHEETS_API, {
-        method: 'POST',
-        headers: this.jsonAuth,
-        body: JSON.stringify(spreadsheet)
-      });
-      const data: { spreadsheetId?: string } = await response.json();
-      id = String(data.spreadsheetId ?? '');
+      id = await this.bootstrap.createSpreadsheet();
       this.spreadsheetId = id;
-
-      await apiFetch(`${SHEETS_API}/${id}/values:batchUpdate`, {
-        method: 'POST',
-        headers: this.jsonAuth,
-        body: JSON.stringify({
-          valueInputOption: 'RAW',
-          data: [
-            { range: `${SheetName.SETTINGS}!A1:B4`, values: [
-                ['GMAIL_SEARCH_LABEL', 'OmniTicket'],
-                ['GMAIL_PROCESSED_LABEL', 'OmniTicket/Procesado'],
-                ['GEMINI_API_KEY', ''],
-                ['LAST_SYNC', 'Nunca']
-            ]},
-            { range: `${SheetName.GASTOS}!A1:J1`, values: [['ID Ticket', 'Tienda', 'Fecha', 'Producto', 'Categoría', 'Cantidad', 'P. Unitario', 'Descuento', 'Total Línea', 'Producto Normalizado']] },
-            { range: `${SheetName.RULES}!A1:C1`, values: [['Original_Pattern', 'Normalized_Name', 'Category']] }
-          ]
-        })
-      });
     }
 
-    await this.runMigrations(id);
+    await runMigrations(this.accessToken, id);
     const settings = await this.getSettings(id);
     return { settings, dbId: id };
   }
 
-  /**
-   * Aplica migraciones idempotentes al spreadsheet existente:
-   * - Crea hoja "Categories" si no existe y la rellena con los 7 defaults
-   * - Corrige precio_total_linea para que sea siempre neto
-   * - Escribe header "Producto Normalizado" en Gastos!J1 si está vacío
-   */
-  private async runMigrations(spreadsheetId: string): Promise<void> {
-    try {
-      const metaResponse = await apiFetch(
-        `${SHEETS_API}/${spreadsheetId}?fields=sheets.properties.title`,
-        { headers: this.auth }
-      );
-      const meta: SheetsMetadataResponse = await metaResponse.json();
-      const sheetTitles: string[] = (meta.sheets ?? []).map(s => String(s.properties?.title ?? ''));
-
-      await this.migrateCategoriesSheet(spreadsheetId, sheetTitles);
-      await this.migrateDiscountFix(spreadsheetId);
-      await this.migrateNormalizedHeader(spreadsheetId);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg === '401') throw e; // Auth errors must propagate
-      console.error("Error en runMigrations:", e);
-      // Non-fatal: don't block app startup for non-auth errors
-    }
-  }
-
-  /** Migration 1: Create Categories sheet if it doesn't exist */
-  private async migrateCategoriesSheet(spreadsheetId: string, sheetTitles: string[]): Promise<void> {
-    if (sheetTitles.includes(SheetName.CATEGORIES)) return;
-
-    await apiFetch(`${SHEETS_API}/${spreadsheetId}:batchUpdate`, {
-      method: 'POST',
-      headers: this.jsonAuth,
-      body: JSON.stringify({
-        requests: [{ addSheet: { properties: { title: SheetName.CATEGORIES, gridProperties: { frozenRowCount: 1 } } } }]
-      })
-    });
-
-    await apiFetch(`${SHEETS_API}/${spreadsheetId}/values:batchUpdate`, {
-      method: 'POST',
-      headers: this.jsonAuth,
-      body: JSON.stringify({
-        valueInputOption: 'RAW',
-        data: [
-          { range: `${SheetName.CATEGORIES}!A1:C1`, values: [['Name', 'Description', 'Status']] },
-          { range: `${SheetName.CATEGORIES}!A2:C${DEFAULT_CATEGORIES.length + 1}`, values: DEFAULT_CATEGORIES }
-        ]
-      })
-    });
-  }
-
-  /** Migration 2: Fix precio_total_linea to always be net (precio_unitario * cantidad - descuento) */
-  private async migrateDiscountFix(spreadsheetId: string): Promise<void> {
-    const settingsKeysResponse = await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.SETTINGS}!A:A`,
-      { headers: this.auth }
-    );
-    const settingsKeysData: SheetsValuesResponse = await settingsKeysResponse.json();
-    const settingsKeys: string[] = (settingsKeysData.values ?? []).map((r: string[]) => r[0] ?? '');
-
-    if (settingsKeys.includes('MIGRATION_DISCOUNT_FIX')) return;
-
-    const gastosResponse = await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.GASTOS}!A2:J`,
-      { headers: this.auth }
-    );
-    const gastosData: SheetsValuesResponse = await gastosResponse.json();
-    const rows: string[][] = gastosData.values ?? [];
-
-    const updates: { range: string; values: [[number]] }[] = [];
-    rows.forEach((row, idx) => {
-      if ((row[GastosCol.PRODUCTO] ?? '') === TOTAL_TICKET_MARKER) return;
-      const cantidad = safeNum(row[GastosCol.CANTIDAD]);
-      const precioUnitario = safeNum(row[GastosCol.PRECIO_UNIT]);
-      const descuento = safeNum(row[GastosCol.DESCUENTO]);
-      const currentTotal = safeNum(row[GastosCol.TOTAL_LINEA]);
-      const correct = precioUnitario * cantidad - descuento;
-      if (Math.abs(correct - currentTotal) > 0.001) {
-        updates.push({ range: `${SheetName.GASTOS}!I${idx + 2}`, values: [[correct]] });
-      }
-    });
-
-    if (updates.length > 0) {
-      await apiFetch(`${SHEETS_API}/${spreadsheetId}/values:batchUpdate`, {
-        method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ valueInputOption: 'RAW', data: updates })
-      });
-    }
-
-    await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.SETTINGS}!A:B:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-      { method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ values: [['MIGRATION_DISCOUNT_FIX', new Date().toISOString()]] }) }
-    );
-  }
-
-  /** Migration 3: Add "Producto Normalizado" header to Gastos!J1 if missing */
-  private async migrateNormalizedHeader(spreadsheetId: string): Promise<void> {
-    const headerResponse = await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.GASTOS}!J1`,
-      { headers: this.auth }
-    );
-    const headerData: SheetsValuesResponse = await headerResponse.json();
-
-    if (headerData.values?.[0]?.[0]) return;
-
-    await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.GASTOS}!J1?valueInputOption=RAW`,
-      { method: 'PUT', headers: this.jsonAuth, body: JSON.stringify({ values: [['Producto Normalizado']] }) }
-    );
-  }
-
   async getSettings(forcedId?: string): Promise<OmniSettings> {
     const id = forcedId || await this.getOrFindId();
-    const response = await apiFetch(`${SHEETS_API}/${id}/values/${SheetName.SETTINGS}!A:B`, {
-      headers: this.auth
-    });
-    const data: SheetsValuesResponse = await response.json();
-    const rows = data.values ?? [];
-    const settings: OmniSettings = { GMAIL_SEARCH_LABEL: 'OmniTicket', GMAIL_PROCESSED_LABEL: 'OmniTicket/Procesado', GEMINI_API_KEY: '', LAST_SYNC: 'Nunca' };
-
-    const validKeys: ReadonlySet<string> = new Set<SettingKey>(['GMAIL_SEARCH_LABEL', 'GMAIL_PROCESSED_LABEL', 'GEMINI_API_KEY', 'LAST_SYNC']);
-    for (const row of rows) {
-      const key = (row[0] ?? '').trim();
-      const val = (row[1] ?? '').trim();
-      if (validKeys.has(key)) {
-        settings[key as keyof OmniSettings] = val;
-      }
-    }
-    return settings;
+    return this.configRepo.getSettings(id);
   }
 
   async updateSetting(key: Exclude<SettingKey, 'LAST_SYNC'>, value: string): Promise<void> {
     const id = await this.getOrFindId();
-    const rowMap: Record<Exclude<SettingKey, 'LAST_SYNC'>, number> = {
-      GMAIL_SEARCH_LABEL: 1,
-      GMAIL_PROCESSED_LABEL: 2,
-      GEMINI_API_KEY: 3,
-    };
-    const row = rowMap[key];
-    if (!row) return;
-    await apiFetch(
-      `${SHEETS_API}/${id}/values/${SheetName.SETTINGS}!B${row}?valueInputOption=RAW`,
-      { method: 'PUT', headers: this.jsonAuth, body: JSON.stringify({ values: [[String(value).trim()]] }) }
-    );
+    return this.configRepo.updateSetting(id, key, value);
   }
 
   async updateGeminiKey(key: string): Promise<void> {
@@ -240,10 +61,6 @@ export class ConfigService {
 
   async updateLastSync(): Promise<void> {
     const id = await this.getOrFindId();
-    const now = new Date().toLocaleString();
-    await apiFetch(
-      `${SHEETS_API}/${id}/values/${SheetName.SETTINGS}!B4?valueInputOption=RAW`,
-      { method: 'PUT', headers: this.jsonAuth, body: JSON.stringify({ values: [[String(now)]] }) }
-    );
+    return this.configRepo.updateLastSync(id);
   }
 }

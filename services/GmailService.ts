@@ -1,112 +1,29 @@
-
-import { apiFetch } from './apiFetch';
-import { GMAIL_API } from '../lib/constants';
-import { authHeaders, jsonAuthHeaders } from '../lib/utils';
-import type {
-  GmailPayload,
-  GmailThreadsResponse,
-  GmailThreadResponse,
-  GmailLabelsResponse,
-  GmailLabelResponse,
-} from '../shared/types/google-api';
-
 /**
- * Extrae texto de un payload de Gmail de forma recursiva.
- * Prioriza text/plain > text/html > recursión en sub-partes multipart.
- *
- * Exported for unit testing.
+ * Facade that delegates to GmailGateway for backward compatibility.
+ * @see infrastructure/google-api/GmailGateway.ts
  */
-export function extractTextFromPayload(payload: GmailPayload): string {
-  // Caso base: el payload tiene body con datos directamente
-  if (payload.body?.data) {
-    try {
-      return atob(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
-    } catch {
-      return '';
-    }
-  }
 
-  const parts = payload.parts ?? [];
-  if (parts.length === 0) return '';
+// Re-export extractTextFromPayload for tests and direct consumers
+export { extractTextFromPayload } from '../infrastructure/google-api/GmailGateway';
 
-  // Prioridad 1: text/plain (ideal para Gemini, sin ruido de HTML)
-  const plain = parts.find(p => p.mimeType === 'text/plain');
-  if (plain) return extractTextFromPayload(plain);
-
-  // Prioridad 2: text/html
-  const html = parts.find(p => p.mimeType === 'text/html');
-  if (html) return extractTextFromPayload(html);
-
-  // Prioridad 3: descender recursivamente en sub-partes (multipart/alternative, multipart/mixed, etc.)
-  for (const part of parts) {
-    const text = extractTextFromPayload(part);
-    if (text) return text;
-  }
-
-  return '';
-}
+import { GmailGateway } from '../infrastructure/google-api/GmailGateway';
 
 export class GmailService {
-  private readonly labelCache = new Map<string, string>();
+  private readonly gateway: GmailGateway;
 
-  constructor(private accessToken: string) {}
-
-  private get auth()     { return authHeaders(this.accessToken); }
-  private get jsonAuth() { return jsonAuthHeaders(this.accessToken); }
+  constructor(accessToken: string) {
+    this.gateway = new GmailGateway(accessToken);
+  }
 
   async searchThreads(query: string): Promise<string[]> {
-    const response = await apiFetch(
-      `${GMAIL_API}/threads?q=${encodeURIComponent(query)}`,
-      { headers: this.auth }
-    );
-    const data: GmailThreadsResponse = await response.json();
-    return (data.threads ?? []).map(t => t.id);
+    return this.gateway.searchThreads(query);
   }
 
   async getThreadContent(threadId: string): Promise<string> {
-    const response = await apiFetch(
-      `${GMAIL_API}/threads/${threadId}`,
-      { headers: this.auth }
-    );
-    const data: GmailThreadResponse = await response.json();
-
-    // Concatenar el texto de todos los mensajes del thread
-    let fullText = '';
-    for (const msg of (data.messages ?? [])) {
-      const text = extractTextFromPayload(msg.payload ?? {});
-      if (text) fullText += text + '\n';
-    }
-
-    return fullText;
+    return this.gateway.getThreadContent(threadId);
   }
 
   async addLabelToThread(threadId: string, labelName: string): Promise<void> {
-    const labelId = await this.getOrCreateLabel(labelName);
-    await apiFetch(
-      `${GMAIL_API}/threads/${threadId}/modify`,
-      { method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ addLabelIds: [labelId] }) }
-    );
-  }
-
-  private async getOrCreateLabel(name: string): Promise<string> {
-    const cached = this.labelCache.get(name);
-    if (cached !== undefined) return cached;
-
-    const response = await apiFetch(`${GMAIL_API}/labels`, { headers: this.auth });
-    const data: GmailLabelsResponse = await response.json();
-    const existing = (data.labels ?? []).find(l => l.name === name);
-    if (existing) {
-      this.labelCache.set(name, existing.id);
-      return existing.id;
-    }
-
-    const createResponse = await apiFetch(`${GMAIL_API}/labels`, {
-      method: 'POST',
-      headers: this.jsonAuth,
-      body: JSON.stringify({ name, labelListVisibility: 'labelShow', messageListVisibility: 'show' })
-    });
-    const created: GmailLabelResponse = await createResponse.json();
-    this.labelCache.set(name, created.id);
-    return created.id;
+    return this.gateway.addLabelToThread(threadId, labelName);
   }
 }
