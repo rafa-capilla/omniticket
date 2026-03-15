@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ConfigService } from '../services/ConfigService';
 import { useApp } from '../contexts/AppContext';
 import { safeText, getErrorMessage } from '../lib/utils';
+import { useServiceFactory } from '../presentation/hooks/useServiceFactory';
 
 interface Props {
   onLogout: () => void;
@@ -9,6 +9,7 @@ interface Props {
 
 export const SettingsView: React.FC<Props> = ({ onLogout }) => {
   const { token, dbId, toast, loadData } = useApp();
+  const { config } = useServiceFactory(token);
 
   const [settings, setSettings] = useState({
     GMAIL_SEARCH_LABEL: '',
@@ -19,7 +20,6 @@ export const SettingsView: React.FC<Props> = ({ onLogout }) => {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const config = new ConfigService(token);
     config.getSettings(dbId).then(s => {
       setSettings({
         GMAIL_SEARCH_LABEL: s.GMAIL_SEARCH_LABEL,
@@ -31,12 +31,11 @@ export const SettingsView: React.FC<Props> = ({ onLogout }) => {
       console.error('[SettingsView] getSettings failed:', err);
       toast.error('Error al cargar la configuración: ' + getErrorMessage(err));
     });
-  }, [token, dbId, toast]);
+  }, [config, dbId, toast]);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const config = new ConfigService(token);
       await Promise.all([
         config.updateSetting('GMAIL_SEARCH_LABEL', settings.GMAIL_SEARCH_LABEL),
         config.updateSetting('GMAIL_PROCESSED_LABEL', settings.GMAIL_PROCESSED_LABEL),

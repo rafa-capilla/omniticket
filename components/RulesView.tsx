@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Rule, Category } from '../types';
-import { SheetsService } from '../services/SheetsService';
 import { useApp } from '../contexts/AppContext';
 import { safeText, getErrorMessage, getActiveCategories } from '../lib/utils';
+import { useServiceFactory } from '../presentation/hooks/useServiceFactory';
 
 interface Props {
   rules: Rule[];
@@ -22,7 +22,7 @@ export const RulesView: React.FC<Props> = ({ rules, categories }) => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Rule>({ pattern: '', normalized: '', category: defaultCategory });
 
-  const sheets = useMemo(() => new SheetsService(token), [token]);
+  const { sheets } = useServiceFactory(token);
 
   const handleAdd = async () => {
     if (!newRule.pattern || !newRule.normalized) return;

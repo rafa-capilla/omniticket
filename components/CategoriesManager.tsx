@@ -1,11 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Category } from '../types';
-import { SheetsService } from '../services/SheetsService';
-import { ManageCategories } from '../application/use-cases/ManageCategories';
-import { SheetsCategoryRepo } from '../infrastructure/google-api/SheetsCategoryRepo';
-import { SheetsRuleRepo } from '../infrastructure/google-api/SheetsRuleRepo';
 import { useApp } from '../contexts/AppContext';
 import { safeText, getErrorMessage } from '../lib/utils';
+import { useServiceFactory } from '../presentation/hooks/useServiceFactory';
 
 interface Props {
   categories: Category[];
@@ -32,8 +29,7 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
   const [isLoading, setIsLoading] = useState(false);
 
   const activeCategories = useMemo(() => categories.filter(c => c.status === 'active'), [categories]);
-  const sheets = useMemo(() => new SheetsService(token), [token]);
-  const manageCategories = useMemo(() => new ManageCategories(new SheetsCategoryRepo(token), new SheetsRuleRepo(token)), [token]);
+  const { sheets, manageCategories } = useServiceFactory(token);
 
   const handleAdd = async () => {
     if (!newCat.name.trim()) return;
