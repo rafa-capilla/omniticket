@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AggregatedData, AIAnalysisResult } from "../types";
+import { analysisResultSchema } from "../schemas/analysisSchema";
 import { withRetry } from "./retry";
 
 /**
@@ -64,23 +65,8 @@ Los valores en chart_data deben ser numéricos (importes en euros). Incluye entr
       });
 
       try {
-        const raw = JSON.parse(response.text || "{}");
-        const analysisText = typeof raw.analysis_text === 'string' ? raw.analysis_text : '';
-        const chartType: AIAnalysisResult['chart_type'] = raw.chart_type === 'pie' ? 'pie' : 'bar';
-        const chartTitle = typeof raw.chart_title === 'string' ? raw.chart_title : '';
-        const chartData: AIAnalysisResult['chart_data'] = Array.isArray(raw.chart_data)
-          ? raw.chart_data
-              .filter((d: unknown): d is Record<string, unknown> =>
-                d !== null && typeof d === 'object' && 'name' in d && 'value' in d)
-              .map((d: Record<string, unknown>) => ({
-                name: String(d.name ?? ''),
-                value: typeof d.value === 'number' ? d.value : 0,
-              }))
-          : [];
-
-        if (!analysisText) throw new Error("La respuesta de IA no contiene texto de análisis");
-
-        return { analysis_text: analysisText, chart_type: chartType, chart_data: chartData, chart_title: chartTitle };
+        const raw: unknown = JSON.parse(response.text || "{}");
+        return analysisResultSchema.parse(raw);
       } catch (e) {
         if (e instanceof SyntaxError) {
           console.error("Error parsing AI analysis response:", response.text);

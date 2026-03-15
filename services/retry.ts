@@ -1,3 +1,5 @@
+import { getErrorMessage } from '../lib/utils';
+
 /**
  * Reintenta una función async ante errores de rate-limit (429).
  * Usa backoff exponencial: 1s, 2s, 4s entre reintentos.
@@ -11,7 +13,7 @@ export async function withRetry<T>(
     try {
       return await fn();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrorMessage(err);
       const isRateLimit = msg.includes('429') || msg.includes('Rate limit');
       const isLastAttempt = attempt === maxAttempts - 1;
 

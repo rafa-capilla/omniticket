@@ -4,7 +4,7 @@ import { SyncEngine } from './services/SyncEngine';
 import { ConfigService } from './services/ConfigService';
 import { SheetsService } from './services/SheetsService';
 import { HistoryTicket, LensType, Rule, Category, ViewState } from './types';
-import { safeText, safeNum, toLocalDateString, getErrorMessage, aggregateByKey } from './lib/utils';
+import { safeText, safeNum, toLocalDateString, getErrorMessage, aggregateByKey, parseGastosRow } from './lib/utils';
 import { TOTAL_TICKET_MARKER, GastosCol } from './lib/constants';
 import { AppContext } from './contexts/AppContext';
 import { ToastItem, ToastList } from './components/ToastList';
@@ -143,16 +143,12 @@ const App: React.FC = () => {
       // Derive history from raw lines (same logic as SheetsService.fetchHistory)
       const historyMap = new Map<string, HistoryTicket>();
       lines.forEach((row) => {
-        const id = safeText(row[GastosCol.ID]);
-        if (!id) return;
-        const tienda = safeText(row[GastosCol.TIENDA]);
-        const fecha = safeText(row[GastosCol.FECHA]);
-        const producto = safeText(row[GastosCol.PRODUCTO]);
-        const total = safeNum(row[GastosCol.TOTAL_LINEA]);
-        if (producto === TOTAL_TICKET_MARKER) {
-          historyMap.set(id, { id, tienda, fecha, total });
-        } else if (!historyMap.has(id)) {
-          historyMap.set(id, { id, tienda, fecha, total: 0 });
+        const parsed = parseGastosRow(row);
+        if (!parsed.id) return;
+        if (parsed.producto === TOTAL_TICKET_MARKER) {
+          historyMap.set(parsed.id, { id: parsed.id, tienda: parsed.tienda, fecha: parsed.fecha, total: parsed.totalLinea });
+        } else if (!historyMap.has(parsed.id)) {
+          historyMap.set(parsed.id, { id: parsed.id, tienda: parsed.tienda, fecha: parsed.fecha, total: 0 });
         }
       });
       setHistory(Array.from(historyMap.values()).sort((a, b) => b.fecha.localeCompare(a.fecha)));
