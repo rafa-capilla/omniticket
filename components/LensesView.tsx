@@ -1,9 +1,11 @@
 import React from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { Rule, Category, LensType } from '../types';
 import { AIAnalysisView } from './AIAnalysisView';
-import { safeText, COLORS, toLocalDateString } from '../lib/utils';
+import { safeText, toLocalDateString } from '../lib/utils';
 import { useDataAggregation } from '../presentation/hooks/useDataAggregation';
+import { KpiDashboard } from '../presentation/components/KpiDashboard';
+import { PieChartCard } from '../presentation/components/charts/PieChartCard';
+import { BarChartCard } from '../presentation/components/charts/BarChartCard';
 
 interface Props {
   currentLens: LensType;
@@ -30,23 +32,7 @@ export const LensesView: React.FC<Props> = ({
 
   return (
     <div className="space-y-8">
-      {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {[
-          { label: 'Gasto Total',        value: `${stats.totalSpent.toFixed(2)}€`, icon: '💰' },
-          { label: 'Ticket Promedio',    value: `${stats.avgTicket.toFixed(2)}€`,  icon: '🧾' },
-          { label: 'Top Categoría',      value: stats.topCategory,                 icon: '🏷️' },
-          { label: 'Tickets Procesados', value: stats.ticketCount,                 icon: '📦' },
-        ].map((kpi, idx) => (
-          <div key={idx} className="bg-white/[0.03] border border-white/5 p-6 rounded-[2rem] flex flex-col justify-between">
-            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-4 flex items-center">
-              <span className="mr-2 opacity-60">{kpi.icon}</span>
-              {kpi.label}
-            </div>
-            <div className="text-3xl font-black text-white tracking-tighter">{kpi.value}</div>
-          </div>
-        ))}
-      </div>
+      <KpiDashboard stats={stats} />
 
       {/* Controls bar */}
       <div className="flex flex-col lg:flex-row items-center justify-between gap-6 bg-white/[0.02] border border-white/5 p-4 rounded-[2.5rem]">
@@ -116,32 +102,17 @@ export const LensesView: React.FC<Props> = ({
 
       {currentLens !== 'analysis' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white/[0.02] p-8 rounded-[3rem] border border-white/5 h-[500px] flex flex-col shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 blur-[80px] -mr-32 -mt-32"></div>
-            <h3 className="text-[11px] font-black mb-8 uppercase tracking-widest text-slate-500 flex items-center">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 mr-3 animate-pulse"></div>
-              Distribución por {LENS_LABELS[currentLens]}
-            </h3>
-            <div className="flex-1 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                {currentLens === 'categories' ? (
-                  <PieChart>
-                    <Pie data={lensData} cx="50%" cy="50%" innerRadius={100} outerRadius={140} paddingAngle={8} dataKey="value" stroke="none">
-                      {lensData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: '#020617', border: 'none', borderRadius: '16px', fontSize: '10px', fontWeight: 'bold' }} itemStyle={{ color: '#fff' }} cursor={{ fill: 'transparent' }} />
-                  </PieChart>
-                ) : (
-                  <BarChart data={lensData.slice(0, 10)} layout="vertical">
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" width={120} tick={{ fill: '#475569', fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ backgroundColor: '#020617', border: 'none', borderRadius: '16px', fontSize: '10px' }} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                    <Bar dataKey="value" fill="#10b981" radius={[0, 12, 12, 0]} barSize={24} />
-                  </BarChart>
-                )}
-              </ResponsiveContainer>
-            </div>
-          </div>
+          {currentLens === 'categories' ? (
+            <PieChartCard
+              data={lensData}
+              title={`Distribución por ${LENS_LABELS[currentLens]}`}
+            />
+          ) : (
+            <BarChartCard
+              data={lensData}
+              title={`Distribución por ${LENS_LABELS[currentLens]}`}
+            />
+          )}
 
           <div className="bg-white/[0.01] p-8 rounded-[3rem] border border-white/5 overflow-y-auto custom-scrollbar h-[500px]">
             <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-8">Listado Detallado</h3>

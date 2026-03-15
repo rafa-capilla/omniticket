@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { SyncEngine } from './services/SyncEngine';
-import { SheetsService } from './services/SheetsService';
-import { HistoryTicket, LensType, Rule, Category, ViewState } from './types';
-import { safeText, safeNum, getErrorMessage, aggregateByKey, parseGastosRow } from './lib/utils';
-import { TOTAL_TICKET_MARKER, GastosCol } from './lib/constants';
+import { LensType, ViewState } from './types';
+import { safeText } from './lib/utils';
 import { AppContext } from './contexts/AppContext';
 import { ToastItem, ToastList } from './components/ToastList';
 import { HistoryView } from './components/HistoryView';
@@ -13,6 +10,8 @@ import { CategoriesManager } from './components/CategoriesManager';
 import { SettingsView } from './components/SettingsView';
 import { useAuth } from './presentation/hooks/useAuth';
 import { useDateFilter } from './presentation/hooks/useDateFilter';
+import { useAppData } from './presentation/hooks/useAppData';
+import { useSyncEngine } from './presentation/hooks/useSyncEngine';
 
 const CLIENT_ID = '493268705547-fnbs5b5op3e9km8mptiimck61opiuot8.apps.googleusercontent.com';
 
@@ -39,97 +38,25 @@ const App: React.FC = () => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // ─── AUTH (delegated to useAuth hook) ──────────────────────────────────────
+  // ─── AUTH ────────────────────────────────────────────────────────────────────
   const { token, dbId, appState, handleLogout, handleReconnect } = useAuth(CLIENT_ID, toast);
 
-  // ─── VIEW STATE ────────────────────────────────────────────────────────────
-  const [currentView, setCurrentView]   = useState<ViewState>('LENSES');
-  const [currentLens, setCurrentLens]   = useState<LensType>('products');
-  const [isSyncing, setIsSyncing]       = useState(false);
-  const [progressMsg, setProgressMsg]   = useState('');
-  const [history, setHistory]           = useState<HistoryTicket[]>([]);
-  const [rawLines, setRawLines]         = useState<string[][]>([]);
-  const [rules, setRules]               = useState<Rule[]>([]);
-  const [categories, setCategories]     = useState<Category[]>([]);
-  const { dateRange, setDateRange }     = useDateFilter();
+  // ─── VIEW STATE ──────────────────────────────────────────────────────────────
+  const [currentView, setCurrentView] = useState<ViewState>('LENSES');
+  const [currentLens, setCurrentLens] = useState<LensType>('products');
+  const { dateRange, setDateRange }   = useDateFilter();
 
-  // ─── DATA ──────────────────────────────────────────────────────────────────
-  const loadData = useCallback(async () => {
-    if (!token || !dbId) return;
-    const sheets = new SheetsService(token);
-    try {
-      // Fetch lines, rules and categories in parallel.
-      // History is derived from the already-fetched lines, avoiding a duplicate
-      // fetchAllLineItems call that fetchHistory() would otherwise make internally.
-      const [lines, r, cats] = await Promise.all([
-        sheets.fetchAllLineItems(dbId),
-        sheets.getRules(dbId),
-        sheets.getCategories(dbId),
-      ]);
-      setRawLines(lines);
-      setRules(r);
-      setCategories(cats);
-
-      // Derive history from raw lines (same logic as SheetsService.fetchHistory)
-      const historyMap = new Map<string, HistoryTicket>();
-      lines.forEach((row) => {
-        const parsed = parseGastosRow(row);
-        if (!parsed.id) return;
-        if (parsed.producto === TOTAL_TICKET_MARKER) {
-          historyMap.set(parsed.id, { id: parsed.id, tienda: parsed.tienda, fecha: parsed.fecha, total: parsed.totalLinea });
-        } else if (!historyMap.has(parsed.id)) {
-          historyMap.set(parsed.id, { id: parsed.id, tienda: parsed.tienda, fecha: parsed.fecha, total: 0 });
-        }
-      });
-      setHistory(Array.from(historyMap.values()).sort((a, b) => b.fecha.localeCompare(a.fecha)));
-    } catch (err: unknown) {
-      const msg = getErrorMessage(err);
-      if (msg === '401') {
-        toast.error('Sesión expirada. Haz clic en "Reconectar" para continuar.');
-      } else {
-        console.error('Error al cargar datos', err);
-      }
-    }
-  }, [token, dbId, toast]);
+  // ─── DATA ────────────────────────────────────────────────────────────────────
+  const { rawLines, history, rules, categories, categoryCounts, loadData } = useAppData(token, dbId, toast);
 
   useEffect(() => {
     if (appState === 'READY') loadData();
   }, [appState, loadData]);
 
-  const runSync = async () => {
-    if (!token) return;
-    setIsSyncing(true);
-    try {
-      const engine = new SyncEngine(token);
-      await engine.runSync(msg => setProgressMsg(safeText(msg)));
-      await loadData();
-      toast.success('Sincronización completada.');
-    } catch (err: unknown) {
-      const msg = getErrorMessage(err);
-      if (msg === '401') {
-        toast.error('Sesión expirada. Haz clic en "Reconectar" para continuar.');
-      } else {
-        toast.error('Error en sync: ' + msg);
-      }
-    } finally {
-      setIsSyncing(false);
-      setProgressMsg('');
-    }
-  };
+  // ─── SYNC ────────────────────────────────────────────────────────────────────
+  const { isSyncing, progressMsg, runSync } = useSyncEngine(token, loadData, toast);
 
-  // Counts per category name — passed to CategoriesManager for delete confirmation
-  const categoryCounts = useMemo(() =>
-    aggregateByKey(
-      rawLines.filter(row => {
-        const name = safeText(row[GastosCol.PRODUCTO] || '');
-        return name && name !== TOTAL_TICKET_MARKER;
-      }),
-      row => safeText(row[GastosCol.CATEGORIA] || ''),
-      () => 1,
-    ),
-  [rawLines]);
-
-  // ─── LOGIN ─────────────────────────────────────────────────────────────────
+  // ─── LOGIN ───────────────────────────────────────────────────────────────────
   if (appState === 'LOGIN') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-slate-950">
@@ -159,7 +86,7 @@ const App: React.FC = () => {
     );
   }
 
-  // ─── LOADING ───────────────────────────────────────────────────────────────
+  // ─── LOADING ─────────────────────────────────────────────────────────────────
   if (appState === 'LOADING') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950">
@@ -169,8 +96,7 @@ const App: React.FC = () => {
     );
   }
 
-  // ─── MAIN (appState === 'READY') ───────────────────────────────────────────
-  // token and dbId are guaranteed non-null once READY
+  // ─── MAIN (appState === 'READY') ─────────────────────────────────────────────
   const contextValue = {
     token: token!,
     dbId: dbId!,
