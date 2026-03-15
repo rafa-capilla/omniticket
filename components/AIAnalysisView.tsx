@@ -19,6 +19,13 @@ const EXAMPLE_PROMPTS = [
   "¿En qué tiendas gasto más y por qué?",
 ];
 
+const TOOLTIP_STYLE = {
+  backgroundColor: '#020617',
+  border: 'none',
+  borderRadius: '16px',
+  fontSize: '10px',
+} as const;
+
 export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categories }) => {
   const { token, dbId, toast } = useApp();
   const { config } = useServiceFactory(token);
@@ -107,13 +114,13 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
                     <Pie data={result.chart_data} cx="50%" cy="50%" innerRadius={80} outerRadius={120} paddingAngle={6} dataKey="value" stroke="none">
                       {result.chart_data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: '#020617', border: 'none', borderRadius: '16px', fontSize: '10px' }} itemStyle={{ color: '#fff' }} />
+                    <Tooltip contentStyle={TOOLTIP_STYLE} itemStyle={{ color: '#fff' }} />
                   </PieChart>
                 ) : (
                   <BarChart data={result.chart_data.slice(0, 10)} layout="vertical">
                     <XAxis type="number" hide />
                     <YAxis dataKey="name" type="category" width={130} tick={{ fill: '#475569', fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ backgroundColor: '#020617', border: 'none', borderRadius: '16px', fontSize: '10px' }} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                    <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                     <Bar dataKey="value" fill="#3b82f6" radius={[0, 12, 12, 0]} barSize={20} />
                   </BarChart>
                 )}
