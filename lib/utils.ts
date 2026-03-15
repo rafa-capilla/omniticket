@@ -11,6 +11,9 @@ export const getErrorMessage = (err: unknown): string =>
 export const safeText = (val: unknown): string =>
   val === null || val === undefined ? '' : String(val);
 
+/** Rounds a number to 2 decimal places — essential for currency arithmetic to avoid IEEE 754 drift. */
+export const roundCurrency = (n: number): number => Math.round(n * 100) / 100;
+
 export const safeNum = (val: unknown): number => {
   if (typeof val === 'number') return val;
   const clean = String(val ?? '0').replace(/\s/g, '').replace(',', '.').replace(/[^-0-9.]/g, '');

@@ -218,11 +218,11 @@ export class ConfigService {
     const rows = data.values ?? [];
     const settings: OmniSettings = { GMAIL_SEARCH_LABEL: 'OmniTicket', GMAIL_PROCESSED_LABEL: 'OmniTicket/Procesado', GEMINI_API_KEY: '', LAST_SYNC: 'Nunca' };
 
-    const validKeys = new Set<SettingKey>(['GMAIL_SEARCH_LABEL', 'GMAIL_PROCESSED_LABEL', 'GEMINI_API_KEY', 'LAST_SYNC']);
+    const validKeys: ReadonlySet<string> = new Set<SettingKey>(['GMAIL_SEARCH_LABEL', 'GMAIL_PROCESSED_LABEL', 'GEMINI_API_KEY', 'LAST_SYNC']);
     for (const row of rows) {
       const key = (row[0] ?? '').trim();
       const val = (row[1] ?? '').trim();
-      if (validKeys.has(key as SettingKey)) {
+      if (validKeys.has(key)) {
         settings[key as keyof OmniSettings] = val;
       }
     }
