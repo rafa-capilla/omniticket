@@ -1,7 +1,7 @@
 import { OmniSettings, SettingKey, SheetsValuesResponse, SheetsMetadataResponse, DriveFilesResponse } from '../types';
-import { TOTAL_TICKET_MARKER, GastosCol } from '../lib/constants';
+import { TOTAL_TICKET_MARKER, GastosCol, SHEETS_API, DRIVE_API, SheetName } from '../lib/constants';
 import { apiFetch } from './apiFetch';
-import { safeNum } from '../lib/utils';
+import { safeNum, authHeaders, jsonAuthHeaders } from '../lib/utils';
 
 const DEFAULT_CATEGORIES = [
   ['Lácteos', 'Leche, yogures, quesos, mantequilla, nata', 'active'],
@@ -22,13 +22,13 @@ export class ConfigService {
 
   constructor(private accessToken: string) {}
 
+  private get auth()     { return authHeaders(this.accessToken); }
+  private get jsonAuth() { return jsonAuthHeaders(this.accessToken); }
+
   async getOrFindId(): Promise<string> {
     if (this.spreadsheetId) return this.spreadsheetId;
     const q = encodeURIComponent(`name = '${ConfigService.FILENAME}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`);
-    // apiFetch ya lanza Error("401") en respuestas 401
-    const response = await apiFetch(`https://www.googleapis.com/drive/v3/files?q=${q}`, {
-      headers: { Authorization: `Bearer ${this.accessToken}` }
-    });
+    const response = await apiFetch(`${DRIVE_API}?q=${q}`, { headers: this.auth });
     const data: DriveFilesResponse = await response.json();
     const fileId = data.files?.[0]?.id;
     if (!fileId) throw new Error("NOT_FOUND");
@@ -51,34 +51,34 @@ export class ConfigService {
       const spreadsheet = {
         properties: { title: ConfigService.FILENAME },
         sheets: [
-          { properties: { title: 'Settings' } },
-          { properties: { title: 'Gastos', gridProperties: { frozenRowCount: 1 } } },
-          { properties: { title: 'Rules', gridProperties: { frozenRowCount: 1 } } },
+          { properties: { title: SheetName.SETTINGS } },
+          { properties: { title: SheetName.GASTOS, gridProperties: { frozenRowCount: 1 } } },
+          { properties: { title: SheetName.RULES, gridProperties: { frozenRowCount: 1 } } },
         ]
       };
-      const response = await apiFetch('https://sheets.googleapis.com/v4/spreadsheets', {
+      const response = await apiFetch(SHEETS_API, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+        headers: this.jsonAuth,
         body: JSON.stringify(spreadsheet)
       });
       const data: { spreadsheetId?: string } = await response.json();
       id = String(data.spreadsheetId ?? '');
       this.spreadsheetId = id;
 
-      await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchUpdate`, {
+      await apiFetch(`${SHEETS_API}/${id}/values:batchUpdate`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+        headers: this.jsonAuth,
         body: JSON.stringify({
           valueInputOption: 'RAW',
           data: [
-            { range: 'Settings!A1:B4', values: [
+            { range: `${SheetName.SETTINGS}!A1:B4`, values: [
                 ['GMAIL_SEARCH_LABEL', 'OmniTicket'],
                 ['GMAIL_PROCESSED_LABEL', 'OmniTicket/Procesado'],
                 ['GEMINI_API_KEY', ''],
                 ['LAST_SYNC', 'Nunca']
             ]},
-            { range: 'Gastos!A1:J1', values: [['ID Ticket', 'Tienda', 'Fecha', 'Producto', 'Categoría', 'Cantidad', 'P. Unitario', 'Descuento', 'Total Línea', 'Producto Normalizado']] },
-            { range: 'Rules!A1:C1', values: [['Original_Pattern', 'Normalized_Name', 'Category']] }
+            { range: `${SheetName.GASTOS}!A1:J1`, values: [['ID Ticket', 'Tienda', 'Fecha', 'Producto', 'Categoría', 'Cantidad', 'P. Unitario', 'Descuento', 'Total Línea', 'Producto Normalizado']] },
+            { range: `${SheetName.RULES}!A1:C1`, values: [['Original_Pattern', 'Normalized_Name', 'Category']] }
           ]
         })
       });
@@ -98,8 +98,8 @@ export class ConfigService {
   private async runMigrations(spreadsheetId: string): Promise<void> {
     try {
       const metaResponse = await apiFetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`,
-        { headers: { Authorization: `Bearer ${this.accessToken}` } }
+        `${SHEETS_API}/${spreadsheetId}?fields=sheets.properties.title`,
+        { headers: this.auth }
       );
       const meta: SheetsMetadataResponse = await metaResponse.json();
       const sheetTitles: string[] = (meta.sheets ?? []).map(s => String(s.properties?.title ?? ''));
@@ -117,24 +117,24 @@ export class ConfigService {
 
   /** Migration 1: Create Categories sheet if it doesn't exist */
   private async migrateCategoriesSheet(spreadsheetId: string, sheetTitles: string[]): Promise<void> {
-    if (sheetTitles.includes('Categories')) return;
+    if (sheetTitles.includes(SheetName.CATEGORIES)) return;
 
-    await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+    await apiFetch(`${SHEETS_API}/${spreadsheetId}:batchUpdate`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+      headers: this.jsonAuth,
       body: JSON.stringify({
-        requests: [{ addSheet: { properties: { title: 'Categories', gridProperties: { frozenRowCount: 1 } } } }]
+        requests: [{ addSheet: { properties: { title: SheetName.CATEGORIES, gridProperties: { frozenRowCount: 1 } } } }]
       })
     });
 
-    await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+    await apiFetch(`${SHEETS_API}/${spreadsheetId}/values:batchUpdate`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
+      headers: this.jsonAuth,
       body: JSON.stringify({
         valueInputOption: 'RAW',
         data: [
-          { range: 'Categories!A1:C1', values: [['Name', 'Description', 'Status']] },
-          { range: `Categories!A2:C${DEFAULT_CATEGORIES.length + 1}`, values: DEFAULT_CATEGORIES }
+          { range: `${SheetName.CATEGORIES}!A1:C1`, values: [['Name', 'Description', 'Status']] },
+          { range: `${SheetName.CATEGORIES}!A2:C${DEFAULT_CATEGORIES.length + 1}`, values: DEFAULT_CATEGORIES }
         ]
       })
     });
@@ -143,8 +143,8 @@ export class ConfigService {
   /** Migration 2: Fix precio_total_linea to always be net (precio_unitario * cantidad - descuento) */
   private async migrateDiscountFix(spreadsheetId: string): Promise<void> {
     const settingsKeysResponse = await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Settings!A:A`,
-      { headers: { Authorization: `Bearer ${this.accessToken}` } }
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.SETTINGS}!A:A`,
+      { headers: this.auth }
     );
     const settingsKeysData: SheetsValuesResponse = await settingsKeysResponse.json();
     const settingsKeys: string[] = (settingsKeysData.values ?? []).map((r: string[]) => r[0] ?? '');
@@ -152,8 +152,8 @@ export class ConfigService {
     if (settingsKeys.includes('MIGRATION_DISCOUNT_FIX')) return;
 
     const gastosResponse = await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!A2:J`,
-      { headers: { Authorization: `Bearer ${this.accessToken}` } }
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.GASTOS}!A2:J`,
+      { headers: this.auth }
     );
     const gastosData: SheetsValuesResponse = await gastosResponse.json();
     const rows: string[][] = gastosData.values ?? [];
@@ -167,52 +167,42 @@ export class ConfigService {
       const currentTotal = safeNum(row[GastosCol.TOTAL_LINEA]);
       const correct = precioUnitario * cantidad - descuento;
       if (Math.abs(correct - currentTotal) > 0.001) {
-        updates.push({ range: `Gastos!I${idx + 2}`, values: [[correct]] });
+        updates.push({ range: `${SheetName.GASTOS}!I${idx + 2}`, values: [[correct]] });
       }
     });
 
     if (updates.length > 0) {
-      await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ valueInputOption: 'RAW', data: updates })
+      await apiFetch(`${SHEETS_API}/${spreadsheetId}/values:batchUpdate`, {
+        method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ valueInputOption: 'RAW', data: updates })
       });
     }
 
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Settings!A:B:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [['MIGRATION_DISCOUNT_FIX', new Date().toISOString()]] })
-      }
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.SETTINGS}!A:B:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { method: 'POST', headers: this.jsonAuth, body: JSON.stringify({ values: [['MIGRATION_DISCOUNT_FIX', new Date().toISOString()]] }) }
     );
   }
 
   /** Migration 3: Add "Producto Normalizado" header to Gastos!J1 if missing */
   private async migrateNormalizedHeader(spreadsheetId: string): Promise<void> {
     const headerResponse = await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!J1`,
-      { headers: { Authorization: `Bearer ${this.accessToken}` } }
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.GASTOS}!J1`,
+      { headers: this.auth }
     );
     const headerData: SheetsValuesResponse = await headerResponse.json();
 
     if (headerData.values?.[0]?.[0]) return;
 
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Gastos!J1?valueInputOption=RAW`,
-      {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [['Producto Normalizado']] })
-      }
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.GASTOS}!J1?valueInputOption=RAW`,
+      { method: 'PUT', headers: this.jsonAuth, body: JSON.stringify({ values: [['Producto Normalizado']] }) }
     );
   }
 
   async getSettings(forcedId?: string): Promise<OmniSettings> {
     const id = forcedId || await this.getOrFindId();
-    const response = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Settings!A:B`, {
-      headers: { Authorization: `Bearer ${this.accessToken}` }
+    const response = await apiFetch(`${SHEETS_API}/${id}/values/${SheetName.SETTINGS}!A:B`, {
+      headers: this.auth
     });
     const data: SheetsValuesResponse = await response.json();
     const rows = data.values ?? [];
@@ -239,12 +229,8 @@ export class ConfigService {
     const row = rowMap[key];
     if (!row) return;
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Settings!B${row}?valueInputOption=RAW`,
-      {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [[String(value).trim()]] })
-      }
+      `${SHEETS_API}/${id}/values/${SheetName.SETTINGS}!B${row}?valueInputOption=RAW`,
+      { method: 'PUT', headers: this.jsonAuth, body: JSON.stringify({ values: [[String(value).trim()]] }) }
     );
   }
 
@@ -256,12 +242,8 @@ export class ConfigService {
     const id = await this.getOrFindId();
     const now = new Date().toLocaleString();
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Settings!B4?valueInputOption=RAW`,
-      {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${this.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [[String(now)]] })
-      }
+      `${SHEETS_API}/${id}/values/${SheetName.SETTINGS}!B4?valueInputOption=RAW`,
+      { method: 'PUT', headers: this.jsonAuth, body: JSON.stringify({ values: [[String(now)]] }) }
     );
   }
 }

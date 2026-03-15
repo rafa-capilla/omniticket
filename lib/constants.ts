@@ -33,3 +33,18 @@ export const DEFAULT_CATEGORY_NAMES = [
 ] as const;
 
 export type DefaultCategoryName = (typeof DEFAULT_CATEGORY_NAMES)[number];
+
+// ─── API Base URLs ────────────────────────────────────────────────────────────
+
+export const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets' as const;
+export const DRIVE_API = 'https://www.googleapis.com/drive/v3/files' as const;
+export const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me' as const;
+
+// ─── Sheet Names ──────────────────────────────────────────────────────────────
+
+export const SheetName = {
+  SETTINGS:   'Settings',
+  GASTOS:     'Gastos',
+  RULES:      'Rules',
+  CATEGORIES: 'Categories',
+} as const;

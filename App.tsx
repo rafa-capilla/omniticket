@@ -4,7 +4,7 @@ import { SyncEngine } from './services/SyncEngine';
 import { ConfigService } from './services/ConfigService';
 import { SheetsService } from './services/SheetsService';
 import { HistoryTicket, LensType, Rule, Category, ViewState } from './types';
-import { safeText, safeNum, toLocalDateString, getErrorMessage } from './lib/utils';
+import { safeText, safeNum, toLocalDateString, getErrorMessage, aggregateByKey } from './lib/utils';
 import { TOTAL_TICKET_MARKER, GastosCol } from './lib/constants';
 import { AppContext } from './contexts/AppContext';
 import { ToastItem, ToastList } from './components/ToastList';
@@ -192,16 +192,16 @@ const App: React.FC = () => {
   };
 
   // Counts per category name — passed to CategoriesManager for delete confirmation
-  const categoryCounts = useMemo(() => {
-    const map = new Map<string, number>();
-    rawLines.forEach((row) => {
-      const name = safeText(row[GastosCol.PRODUCTO] || '');
-      if (!name || name === TOTAL_TICKET_MARKER) return;
-      const cat = safeText(row[GastosCol.CATEGORIA] || '');
-      if (cat) map.set(cat, (map.get(cat) || 0) + 1);
-    });
-    return map;
-  }, [rawLines]);
+  const categoryCounts = useMemo(() =>
+    aggregateByKey(
+      rawLines.filter(row => {
+        const name = safeText(row[GastosCol.PRODUCTO] || '');
+        return name && name !== TOTAL_TICKET_MARKER;
+      }),
+      row => safeText(row[GastosCol.CATEGORIA] || ''),
+      () => 1,
+    ),
+  [rawLines]);
 
   // ─── LOGIN ─────────────────────────────────────────────────────────────────
   if (appState === 'LOGIN') {
