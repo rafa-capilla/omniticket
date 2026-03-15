@@ -7,7 +7,7 @@ import { ticketSchema } from "../schemas/ticketSchema";
 import { withRetry } from "./retry";
 import { SyncResult, TicketData, OmniSettings, Category, Rule } from "../types";
 import { DEFAULT_CATEGORY_NAMES } from "../lib/constants";
-import { getErrorMessage } from "../lib/utils";
+import { getErrorMessage, roundCurrency } from "../lib/utils";
 
 /**
  * Motor de sincronización principal de OmniTicket.
@@ -202,9 +202,8 @@ export class SyncEngine {
   /** Validates the raw Gemini response against the Zod schema. */
   private parseAndValidateResponse(rawJson: unknown, uuid: string): TicketData {
     try {
-      const json = rawJson as Record<string, unknown>;
-      json.id = uuid; // always use our UUID
-      return ticketSchema.parse(json);
+      const base = (rawJson !== null && typeof rawJson === 'object') ? rawJson : {};
+      return ticketSchema.parse({ ...base, id: uuid });
     } catch (e: unknown) {
       console.error("Fallo en validación Zod:", e);
       throw new Error(`Datos de IA inválidos: ${getErrorMessage(e)}`);
@@ -214,7 +213,7 @@ export class SyncEngine {
   /** Recalculates precio_total_linea to always be net (precio_unitario * cantidad - descuento). */
   private recalculateLineTotals(ticketData: TicketData): void {
     for (const item of ticketData.items) {
-      item.precio_total_linea = (item.precio_unitario * item.cantidad) - item.descuento;
+      item.precio_total_linea = roundCurrency((item.precio_unitario * item.cantidad) - item.descuento);
     }
   }
 

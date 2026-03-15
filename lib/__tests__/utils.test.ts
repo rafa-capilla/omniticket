@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { safeText, safeNum, toLocalDateString, getErrorMessage } from '../utils';
+import { safeText, safeNum, toLocalDateString, getErrorMessage, roundCurrency } from '../utils';
 
 // ─── safeText ────────────────────────────────────────────────────────────────
 
@@ -94,6 +94,31 @@ describe('toLocalDateString', () => {
   it('handles January 1st correctly', () => {
     const d = new Date(2026, 0, 1); // Jan 1, 2026
     expect(toLocalDateString(d)).toBe('2026-01-01');
+  });
+});
+
+// ─── roundCurrency ──────────────────────────────────────────────────────────
+
+describe('roundCurrency', () => {
+  it('returns an exact two-decimal value unchanged', () => {
+    expect(roundCurrency(1.50)).toBe(1.5);
+  });
+
+  it('rounds a floating-point drift result to 2 decimals (e.g. 0.1 + 0.2)', () => {
+    expect(roundCurrency(0.1 + 0.2)).toBe(0.3);
+  });
+
+  it('handles precio_unitario * cantidad - descuento without drift', () => {
+    // 1.99 * 3 = 5.970000000000001 in IEEE 754
+    expect(roundCurrency(1.99 * 3)).toBe(5.97);
+  });
+
+  it('returns 0 for 0', () => {
+    expect(roundCurrency(0)).toBe(0);
+  });
+
+  it('handles negative values', () => {
+    expect(roundCurrency(-1.999)).toBe(-2);
   });
 });
 
