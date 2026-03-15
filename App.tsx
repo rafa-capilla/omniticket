@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { GoogleAuthService } from './services/GoogleAuthService';
 import { SyncEngine } from './services/SyncEngine';
-import { ConfigService } from './services/ConfigService';
 import { SheetsService } from './services/SheetsService';
 import { HistoryTicket, LensType, Rule, Category, ViewState } from './types';
-import { safeText, safeNum, toLocalDateString, getErrorMessage, aggregateByKey, parseGastosRow } from './lib/utils';
+import { safeText, safeNum, getErrorMessage, aggregateByKey, parseGastosRow } from './lib/utils';
 import { TOTAL_TICKET_MARKER, GastosCol } from './lib/constants';
 import { AppContext } from './contexts/AppContext';
 import { ToastItem, ToastList } from './components/ToastList';
@@ -13,38 +11,17 @@ import { RulesView } from './components/RulesView';
 import { LensesView } from './components/LensesView';
 import { CategoriesManager } from './components/CategoriesManager';
 import { SettingsView } from './components/SettingsView';
+import { useAuth } from './presentation/hooks/useAuth';
+import { useDateFilter } from './presentation/hooks/useDateFilter';
 
 const CLIENT_ID = '493268705547-fnbs5b5op3e9km8mptiimck61opiuot8.apps.googleusercontent.com';
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
 const App: React.FC = () => {
-  const [token, setToken]               = useState<string | null>(null);
-  const [dbId, setDbId]                 = useState<string | null>(null);
-  const [appState, setAppState]         = useState<'LOGIN' | 'LOADING' | 'READY'>('LOGIN');
-  const [currentView, setCurrentView]   = useState<ViewState>('LENSES');
-  const [currentLens, setCurrentLens]   = useState<LensType>('products');
-  const [isSyncing, setIsSyncing]       = useState(false);
-  const [progressMsg, setProgressMsg]   = useState('');
-  const [history, setHistory]           = useState<HistoryTicket[]>([]);
-  const [rawLines, setRawLines]         = useState<string[][]>([]);
-  const [rules, setRules]               = useState<Rule[]>([]);
-  const [categories, setCategories]     = useState<Category[]>([]);
-
-  const [dateRange, setDateRange] = useState(() => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    return {
-      start: toLocalDateString(start),
-      end: toLocalDateString(end),
-    };
-  });
-
   // ─── TOAST SYSTEM ──────────────────────────────────────────────────────────
   const [toasts, setToasts]   = useState<ToastItem[]>([]);
   const toastCounter          = useRef(0);
-  const isBootstrapped        = useRef(false);
 
   const addToast = useCallback((message: string, type: ToastItem['type']) => {
     const id = ++toastCounter.current;
@@ -62,66 +39,19 @@ const App: React.FC = () => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // ─── AUTH ──────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const savedToken = localStorage.getItem('google_access_token');
-    const expiresAt = Number(localStorage.getItem('google_token_expires_at') || 0);
-    const isExpired = !expiresAt || Date.now() >= expiresAt;
+  // ─── AUTH (delegated to useAuth hook) ──────────────────────────────────────
+  const { token, dbId, appState, handleLogout, handleReconnect } = useAuth(CLIENT_ID, toast);
 
-    GoogleAuthService.init((newToken) => setToken(newToken), CLIENT_ID);
-
-    if (savedToken && !isExpired) {
-      setToken(savedToken);
-    } else if (savedToken && isExpired) {
-      GoogleAuthService.silentRefresh();
-    }
-  }, []);
-
-  // Silent refresh check every 60s
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (GoogleAuthService.isTokenExpiringSoon()) {
-        GoogleAuthService.silentRefresh();
-      }
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleLogout = useCallback(() => {
-    GoogleAuthService.logout();
-    isBootstrapped.current = false;
-    setToken(null);
-    setDbId(null);
-    setAppState('LOGIN');
-  }, []);
-
-  const handleReconnect = useCallback(() => {
-    GoogleAuthService.login();
-  }, []);
-
-  const bootstrapConfig = useCallback(async (accessToken: string) => {
-    setAppState('LOADING');
-    try {
-      const config = new ConfigService(accessToken);
-      const { dbId: id } = await config.ensureDatabase();
-      setDbId(id);
-      setAppState('READY');
-      isBootstrapped.current = true;
-    } catch (err: unknown) {
-      const msg = getErrorMessage(err);
-      if (msg === '401') handleLogout();
-      else {
-        toast.error('Error al inicializar: ' + msg);
-        setAppState('LOGIN');
-      }
-    }
-  }, [handleLogout, toast]);
-
-  useEffect(() => {
-    if (!token) { setAppState('LOGIN'); return; }
-    if (isBootstrapped.current) return; // token refresh — skip re-bootstrap
-    bootstrapConfig(token);
-  }, [token, bootstrapConfig]);
+  // ─── VIEW STATE ────────────────────────────────────────────────────────────
+  const [currentView, setCurrentView]   = useState<ViewState>('LENSES');
+  const [currentLens, setCurrentLens]   = useState<LensType>('products');
+  const [isSyncing, setIsSyncing]       = useState(false);
+  const [progressMsg, setProgressMsg]   = useState('');
+  const [history, setHistory]           = useState<HistoryTicket[]>([]);
+  const [rawLines, setRawLines]         = useState<string[][]>([]);
+  const [rules, setRules]               = useState<Rule[]>([]);
+  const [categories, setCategories]     = useState<Category[]>([]);
+  const { dateRange, setDateRange }     = useDateFilter();
 
   // ─── DATA ──────────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -214,7 +144,7 @@ const App: React.FC = () => {
           Analiza tus gastos con el poder de Gemini directamente desde tus tickets de Gmail.
         </p>
         <button
-          onClick={() => GoogleAuthService.login()}
+          onClick={handleReconnect}
           className="z-10 bg-white text-slate-950 px-12 py-5 rounded-full font-black text-xl hover:scale-105 transition-all shadow-2xl flex items-center space-x-4 active:scale-95"
         >
           <svg className="w-6 h-6" viewBox="0 0 24 24">

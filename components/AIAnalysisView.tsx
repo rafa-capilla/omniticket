@@ -2,10 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { Category, AIAnalysisResult } from '../types';
 import { AIAnalysisService } from '../services/AIAnalysisService';
-import { ConfigService } from '../services/ConfigService';
 import { useApp } from '../contexts/AppContext';
 import { COLORS, getErrorMessage } from '../lib/utils';
 import { buildAggregatedData } from '../domain/services/DataAggregator';
+import { useServiceFactory } from '../presentation/hooks/useServiceFactory';
 
 interface Props {
   rawLines: string[][];
@@ -21,6 +21,7 @@ const EXAMPLE_PROMPTS = [
 
 export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categories }) => {
   const { token, dbId, toast } = useApp();
+  const { config } = useServiceFactory(token);
   const [prompt, setPrompt] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<AIAnalysisResult | null>(null);
@@ -34,7 +35,6 @@ export const AIAnalysisView: React.FC<Props> = ({ rawLines, dateRange, categorie
     if (!prompt.trim()) return;
     setIsAnalyzing(true);
     try {
-      const config = new ConfigService(token);
       const settings = await config.getSettings(dbId);
       if (!settings.GEMINI_API_KEY) {
         toast.error('Configura tu GEMINI_API_KEY en la vista Settings primero.');

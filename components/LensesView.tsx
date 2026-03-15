@@ -1,11 +1,9 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { Rule, Category, LensType } from '../types';
 import { AIAnalysisView } from './AIAnalysisView';
 import { safeText, COLORS, toLocalDateString } from '../lib/utils';
-import { GastosCol } from '../lib/constants';
-import { applyRulesToRows } from '../domain/services/RuleEngine';
-import { calculateKPIs, aggregateByLens, filterByDateRange } from '../domain/services/DataAggregator';
+import { useDataAggregation } from '../presentation/hooks/useDataAggregation';
 
 interface Props {
   currentLens: LensType;
@@ -27,23 +25,8 @@ const LENS_LABELS: Record<LensType, string> = {
 export const LensesView: React.FC<Props> = ({
   currentLens, setCurrentLens, rawLines, dateRange, setDateRange, rules, categories,
 }) => {
-  const activeCategories = useMemo(() => categories.filter(c => c.status === 'active'), [categories]);
-
-  const processedData = useMemo(() => {
-    const filtered = filterByDateRange(rawLines, dateRange);
-    return applyRulesToRows(
-      filtered, rules,
-      GastosCol.PRODUCTO, GastosCol.CATEGORIA, GastosCol.NOMBRE_NORM,
-      '--- TOTAL TICKET ---',
-    );
-  }, [rawLines, dateRange, rules]);
-
-  const stats = useMemo(() => calculateKPIs(processedData), [processedData]);
-
-  const lensData = useMemo(() => {
-    if (currentLens === 'analysis') return [];
-    return aggregateByLens(processedData, currentLens, activeCategories);
-  }, [processedData, currentLens, activeCategories]);
+  const { stats, lensData } = useDataAggregation(rawLines, dateRange, rules, categories, currentLens);
+  const activeCategories = categories.filter(c => c.status === 'active');
 
   return (
     <div className="space-y-8">
