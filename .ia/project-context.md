@@ -6,11 +6,13 @@ OmniTicket es una aplicación web que permite a los usuarios controlar de forma 
 ## Arquitectura Técnica
 
 ### Stack
-- **Frontend**: React 18.3 + TypeScript
-- **Build Tool**: Vite 6.0
-- **Styling**: Tailwind CSS 3.4 — compilado en build-time via PostCSS (`tailwind.config.js` + `postcss.config.js`). **No se usa CDN.**
+- **Frontend**: React 19.2 + TypeScript 5.9
+- **Build Tool**: Vite 6.4
+- **Styling**: Tailwind CSS 3.4.17 — compilado en build-time via PostCSS (`tailwind.config.js` + `postcss.config.js`). **No se usa CDN.**
+- **Utilidades CSS**: clsx 2.1 + tailwind-merge 3.0
+- **Iconos**: Lucide React 0.577
 - **Visualización**: Recharts 3.7
-- **Validación**: Zod 4.3 (solo para el schema de tickets de Gemini)
+- **Validación**: Zod 4.3.6 (solo para el schema de tickets de Gemini)
 - **IA**: Google Gemini AI (`@google/genai` 1.41)
 
 ### Estructura del Proyecto
@@ -36,11 +38,12 @@ omniticket/
 ├── contexts/
 │   └── AppContext.tsx           # Context de React (token, dbId, toast, loadData)
 ├── lib/
-│   └── utils.ts                 # Helpers compartidos: safeText, safeNum, COLORS
+│   ├── utils.ts                 # Helpers compartidos: safeText, safeNum, COLORS, authHeaders
+│   └── constants.ts             # Constantes: GastosCol, SheetName, URLs de APIs, TOTAL_TICKET_MARKER
 ├── schemas/
 │   └── ticketSchema.ts          # Schema Zod para validación de respuesta de Gemini
 ├── types.ts                     # Tipos TypeScript compartidos
-├── App.tsx                      # Orchestrador principal (~316 líneas)
+├── App.tsx                      # Orchestrador principal (~349 líneas)
 ├── index.tsx                    # Entry point
 ├── index.css                    # Tailwind directives + utilidades custom
 ├── tailwind.config.js           # Configuración de Tailwind (content paths, animaciones)
@@ -50,11 +53,9 @@ omniticket/
 ## Flujo Principal de Funcionamiento
 
 ### 1. Autenticación (GoogleAuthService)
-- Usuario se conecta vía OAuth 2.0 de Google (flujo implícito)
-- Scopes requeridos: `gmail.modify`, `spreadsheets`, `drive.file`
-- Access token se guarda en `localStorage` (`google_access_token`) con timestamp de expiración (`google_token_expires_at`)
-- `silentRefresh()` se ejecuta automáticamente cada 60s si el token expira en menos de 5 min
-- Botón "Reconectar" en el header permite renovar token manualmente sin hacer logout
+- OAuth 2.0 de Google (flujo implícito) con scopes: `gmail.modify`, `spreadsheets`, `drive.file`
+- Token en `localStorage` con renovación automática silenciosa + botón "Reconectar" manual
+- Ver detalles completos en `api-config.md` → "Google OAuth 2.0"
 
 ### 2. Inicialización de Base de Datos (ConfigService)
 - Se busca/crea un spreadsheet llamado "OmniTicket_DB" en Google Drive del usuario
@@ -109,11 +110,12 @@ Dashboards incluyen:
 ### TicketItem
 ```text
 {
-  nombre: string            // Nombre del producto (Gemini extrae y normaliza en una sola pasada)
-  categoria: string         // Categoría según las del spreadsheet
+  nombre: string              // Nombre del producto (Gemini extrae y normaliza en una sola pasada)
+  nombre_normalizado?: string // Nombre normalizado (opcional, asignado post-extracción)
+  categoria: string           // Categoría según las del spreadsheet
   precio_unitario: number
   cantidad: number
-  descuento: number        // Valor positivo (ej: 2€ de descuento = 2, no -2)
+  descuento: number           // Valor positivo (ej: 2€ de descuento = 2, no -2)
   precio_total_linea: number
 }
 ```
@@ -138,16 +140,7 @@ Dashboards incluyen:
 
 ## Servicios Clave
 
-### apiFetch (services/apiFetch.ts)
-Helper HTTP centralizado que envuelve `fetch()`:
-- Verifica `response.ok` tras cada llamada
-- Lanza `Error("401")` en respuestas 401 → App.tsx lo captura y muestra toast de sesión expirada
-- Extrae el mensaje de error del body JSON de Google para errores 4xx/5xx descriptivos
-- Todos los servicios (Gmail, Sheets, Config) usan `apiFetch` en lugar de `fetch` directamente
-
-### withRetry (services/retry.ts)
-Retry con backoff exponencial: 1s → 2s → 4s, máximo 3 intentos.
-Solo reintenta en errores de rate-limit (429 / "Rate limit"). Otros errores se propagan inmediatamente.
+> **apiFetch** y **withRetry**: helpers HTTP centralizados usados por todos los servicios. Ver detalles en `api-config.md`.
 
 ### SyncEngine
 Motor principal de sincronización. Coordina Gmail → Gemini → Sheets de forma secuencial.
@@ -182,18 +175,14 @@ Abstrae operaciones con Google Sheets API:
 - `addLabelToThread`: añade label "Procesado" al thread
 
 ### GoogleAuthService
-- `init()`: inicializa el cliente OAuth con callback que guarda token en localStorage
-- `login()`: abre el popup OAuth con `prompt: 'consent'`
-- `silentRefresh()`: renueva el token sin UI con `prompt: ''`
-- `isTokenExpiringSoon()`: comprueba si queda menos de 5 min para expiración
-- `logout()`: limpia localStorage (token + expiresAt)
+- `init()`, `login()`, `silentRefresh()`, `isTokenExpiringSoon()`, `logout()`
+- Ver flujo detallado en `api-config.md` → "Google OAuth 2.0"
 
 ## Consideraciones de Seguridad
-- API Key de Gemini se guarda en el Spreadsheet del usuario (no en servidor ni en código)
-- OAuth access token guardado en `localStorage` con timestamp de expiración
-- Content-Security-Policy en `index.html`: limita orígenes a los dominios de Google APIs
-- No hay backend: toda la lógica corre client-side
-- Los datos nunca salen del ecosistema Google del usuario
+> Ver detalles completos en `api-config.md` → "Seguridad" y `business-rules.md` → "Privacidad y Seguridad"
+
+- No hay backend: toda la lógica corre client-side, datos en el ecosistema Google del usuario
+- CSP restrictiva en `index.html`, API key en spreadsheet (no en código)
 
 ## Sistema de Notificaciones
 Los errores y mensajes se muestran con **toasts** (no `alert()`):
@@ -208,7 +197,8 @@ Los errores y mensajes se muestran con **toasts** (no `alert()`):
 - Tailwind CSS build-time (utility-first)
 - Nombres de archivos: PascalCase para servicios y componentes
 - Manejo de errores: try/catch con mensajes descriptivos, toast al usuario
-- `safeText()` y `safeNum()` desde `lib/utils.ts` para sanitizar valores de Sheets
+- `safeText()`, `safeNum()`, `authHeaders()` desde `lib/utils.ts` para sanitizar valores y construir headers
+- Constantes centralizadas en `lib/constants.ts`: índices de columnas (`GastosCol`), nombres de hojas (`SheetName`), URLs base de APIs
 - Contexto `AppContext`: provee `token`, `dbId`, `toast`, `loadData` a todos los componentes via `useApp()`
 
 ## Limitaciones Conocidas
