@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { Category } from '../types';
 import { SheetsService } from '../services/SheetsService';
+import { ManageCategories } from '../application/use-cases/ManageCategories';
+import { SheetsCategoryRepo } from '../infrastructure/google-api/SheetsCategoryRepo';
+import { SheetsRuleRepo } from '../infrastructure/google-api/SheetsRuleRepo';
 import { useApp } from '../contexts/AppContext';
 import { safeText, getErrorMessage } from '../lib/utils';
 
@@ -30,6 +33,7 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
 
   const activeCategories = useMemo(() => categories.filter(c => c.status === 'active'), [categories]);
   const sheets = useMemo(() => new SheetsService(token), [token]);
+  const manageCategories = useMemo(() => new ManageCategories(new SheetsCategoryRepo(token), new SheetsRuleRepo(token)), [token]);
 
   const handleAdd = async () => {
     if (!newCat.name.trim()) return;
@@ -78,19 +82,7 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
   const executeDelete = async (index: number, name: string, replacement: string) => {
     setIsLoading(true);
     try {
-      if (replacement) {
-        const [, allRules] = await Promise.all([
-          sheets.updateCategoryInGastos(dbId, name, replacement),
-          sheets.getRules(dbId),
-        ]);
-        const ruleUpdates = allRules.flatMap((rule, i) =>
-          rule.category === name
-            ? [sheets.updateRule(dbId, i + 2, { ...rule, category: replacement })]
-            : []
-        );
-        await Promise.all(ruleUpdates);
-      }
-      await sheets.deleteCategory(dbId, index + 2);
+      await manageCategories.deleteWithCascade(dbId, index + 2, name, replacement);
       setDeleteModal(null);
       await loadData();
     } catch (err: unknown) {
