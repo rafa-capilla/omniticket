@@ -1,5 +1,5 @@
-import { Rule, Category } from '../types';
-import { DEFAULT_CATEGORY_NAMES } from './constants';
+import { Rule, Category, GastosRow } from '../types';
+import { DEFAULT_CATEGORY_NAMES, GastosCol } from './constants';
 
 export const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
 
@@ -70,6 +70,25 @@ export function matchRule(productName: string, rules: Rule[]): Rule | undefined 
   if (!productName) return undefined;
   const lower = productName.toLowerCase();
   return rules.find(r => r.pattern && lower.includes(r.pattern.toLowerCase()));
+}
+
+/**
+ * Parses a raw string[] row from the Gastos sheet into a typed GastosRow.
+ * Centralises the index-based access so consumers work with named fields.
+ */
+export function parseGastosRow(row: string[]): GastosRow {
+  return {
+    id:                safeText(row[GastosCol.ID]),
+    tienda:            safeText(row[GastosCol.TIENDA]),
+    fecha:             safeText(row[GastosCol.FECHA]),
+    producto:          safeText(row[GastosCol.PRODUCTO]),
+    categoria:         safeText(row[GastosCol.CATEGORIA]),
+    cantidad:          safeNum(row[GastosCol.CANTIDAD]),
+    precioUnitario:    safeNum(row[GastosCol.PRECIO_UNIT]),
+    descuento:         safeNum(row[GastosCol.DESCUENTO]),
+    totalLinea:        safeNum(row[GastosCol.TOTAL_LINEA]),
+    nombreNormalizado: safeText(row[GastosCol.NOMBRE_NORM]),
+  };
 }
 
 /**

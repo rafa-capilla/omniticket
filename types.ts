@@ -79,6 +79,23 @@ export interface AggregatedData {
   lineItems: string[];
 }
 
+/**
+ * Typed representation of a single row from the Gastos sheet (A:J).
+ * Replaces fragile index-based access with named, typed fields.
+ */
+export interface GastosRow {
+  id: string;
+  tienda: string;
+  fecha: string;
+  producto: string;
+  categoria: string;
+  cantidad: number;
+  precioUnitario: number;
+  descuento: number;
+  totalLinea: number;
+  nombreNormalizado: string;
+}
+
 export type ViewState = 'LENSES' | 'HISTORY' | 'RULES' | 'CATEGORIES' | 'SETTINGS';
 export type LensType = 'products' | 'categories' | 'stores' | 'analysis';
 
