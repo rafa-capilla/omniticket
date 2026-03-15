@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { safeText, safeNum, toLocalDateString, getErrorMessage, roundCurrency } from '../utils';
+import { safeText, safeNum, toLocalDateString, getErrorMessage, roundCurrency, catchNonAuth, aggregateByKey, matchRule, getActiveCategories } from '../utils';
+import { Rule, Category } from '../../types';
 
 // ─── safeText ────────────────────────────────────────────────────────────────
 
@@ -143,5 +144,157 @@ describe('getErrorMessage', () => {
 
   it('converts undefined to the string "undefined"', () => {
     expect(getErrorMessage(undefined)).toBe('undefined');
+  });
+});
+
+// ─── catchNonAuth ────────────────────────────────────────────────────────────
+
+describe('catchNonAuth', () => {
+  it('re-throws 401 errors', () => {
+    const err = new Error('401');
+    expect(() => catchNonAuth(err, 'test', [])).toThrow('401');
+  });
+
+  it('returns fallback for non-401 Error', () => {
+    const err = new Error('something else');
+    const result = catchNonAuth(err, 'test', 'fallback');
+    expect(result).toBe('fallback');
+  });
+
+  it('returns fallback for non-Error thrown values', () => {
+    const result = catchNonAuth('string error', 'test', 42);
+    expect(result).toBe(42);
+  });
+
+  it('returns the typed fallback (array)', () => {
+    const err = new Error('network');
+    const result = catchNonAuth(err, 'ctx', [] as string[]);
+    expect(result).toEqual([]);
+  });
+
+  it('returns null fallback', () => {
+    const err = new Error('network');
+    const result = catchNonAuth(err, 'ctx', null);
+    expect(result).toBeNull();
+  });
+});
+
+// ─── aggregateByKey ──────────────────────────────────────────────────────────
+
+describe('aggregateByKey', () => {
+  it('aggregates values by key', () => {
+    const items = [
+      { cat: 'A', val: 10 },
+      { cat: 'B', val: 20 },
+      { cat: 'A', val: 5 },
+    ];
+    const result = aggregateByKey(items, i => i.cat, i => i.val);
+    expect(result.get('A')).toBe(15);
+    expect(result.get('B')).toBe(20);
+  });
+
+  it('returns empty map for empty input', () => {
+    const result = aggregateByKey([], () => 'x', () => 1);
+    expect(result.size).toBe(0);
+  });
+
+  it('skips items with empty string key', () => {
+    const items = [
+      { cat: '', val: 10 },
+      { cat: 'A', val: 5 },
+    ];
+    const result = aggregateByKey(items, i => i.cat, i => i.val);
+    expect(result.has('')).toBe(false);
+    expect(result.get('A')).toBe(5);
+  });
+
+  it('handles single-item input', () => {
+    const items = [{ cat: 'X', val: 42 }];
+    const result = aggregateByKey(items, i => i.cat, i => i.val);
+    expect(result.get('X')).toBe(42);
+    expect(result.size).toBe(1);
+  });
+});
+
+// ─── matchRule ────────────────────────────────────────────────────────────────
+
+describe('matchRule', () => {
+  const rules: Rule[] = [
+    { pattern: 'agua con gas', normalized: 'Agua con Gas', category: 'Bebidas' },
+    { pattern: 'leche', normalized: 'Leche', category: 'Lácteos' },
+  ];
+
+  it('matches case-insensitively (contains)', () => {
+    const result = matchRule('AGUA CON GAS FONT VELLA 1.5L', rules);
+    expect(result).toEqual(rules[0]);
+  });
+
+  it('returns the first matching rule', () => {
+    const result = matchRule('leche entera', rules);
+    expect(result).toEqual(rules[1]);
+  });
+
+  it('returns undefined when no rule matches', () => {
+    const result = matchRule('pan de molde', rules);
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined for empty product name', () => {
+    const result = matchRule('', rules);
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined for empty rules array', () => {
+    const result = matchRule('leche', []);
+    expect(result).toBeUndefined();
+  });
+
+  it('skips rules with empty pattern', () => {
+    const rulesWithEmpty: Rule[] = [
+      { pattern: '', normalized: 'Empty', category: 'Otros' },
+      { pattern: 'leche', normalized: 'Leche', category: 'Lácteos' },
+    ];
+    const result = matchRule('leche entera', rulesWithEmpty);
+    expect(result).toEqual(rulesWithEmpty[1]);
+  });
+});
+
+// ─── getActiveCategories ─────────────────────────────────────────────────────
+
+describe('getActiveCategories', () => {
+  it('returns only active categories', () => {
+    const cats: Category[] = [
+      { name: 'Bebidas', description: '', status: 'active' },
+      { name: 'Old', description: '', status: 'inactive' },
+      { name: 'Otros', description: '', status: 'active' },
+    ];
+    const result = getActiveCategories(cats);
+    expect(result).toHaveLength(2);
+    expect(result.map(c => c.name)).toEqual(['Bebidas', 'Otros']);
+  });
+
+  it('falls back to default categories when none are active', () => {
+    const cats: Category[] = [
+      { name: 'Old', description: '', status: 'inactive' },
+    ];
+    const result = getActiveCategories(cats);
+    expect(result.length).toBe(7);
+    expect(result[0]!.name).toBe('Lácteos');
+    expect(result.every(c => c.status === 'active')).toBe(true);
+  });
+
+  it('falls back to defaults for empty array', () => {
+    const result = getActiveCategories([]);
+    expect(result.length).toBe(7);
+    expect(result[0]!.name).toBe('Lácteos');
+  });
+
+  it('returns all categories when all are active', () => {
+    const cats: Category[] = [
+      { name: 'A', description: 'desc', status: 'active' },
+      { name: 'B', description: '', status: 'active' },
+    ];
+    const result = getActiveCategories(cats);
+    expect(result).toEqual(cats);
   });
 });

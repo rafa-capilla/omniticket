@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { Rule, Category, DashboardStats, LensType } from '../types';
 import { AIAnalysisView } from './AIAnalysisView';
-import { safeText, safeNum, COLORS, toLocalDateString, aggregateByKey } from '../lib/utils';
+import { safeText, safeNum, COLORS, toLocalDateString, aggregateByKey, matchRule } from '../lib/utils';
 import { TOTAL_TICKET_MARKER, GastosCol } from '../lib/constants';
 
 interface Props {
@@ -37,9 +37,7 @@ export const LensesView: React.FC<Props> = ({
         const originalName = safeText(row[GastosCol.PRODUCTO] ?? '');
         if (originalName === TOTAL_TICKET_MARKER || !originalName) return row;
 
-        const matchedRule = rules.find(r =>
-          r.pattern && originalName.toLowerCase().includes(safeText(r.pattern).toLowerCase())
-        );
+        const matchedRule = matchRule(originalName, rules);
         const normalizedFromSync = safeText(row[GastosCol.NOMBRE_NORM] ?? '');
         let normalizedName = normalizedFromSync || originalName;
         let category = safeText(row[GastosCol.CATEGORIA] ?? 'Otros');
