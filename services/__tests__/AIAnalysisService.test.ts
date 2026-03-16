@@ -125,16 +125,16 @@ describe('AIAnalysisService.analyze', () => {
     expect(result.chart_type).toBe('bar');
   });
 
-  it('filters out invalid chart_data entries (missing name or value)', async () => {
+  it('handles malformed chart_data entries (missing fields get defaults, nulls filtered)', async () => {
     mockGenerateContent.mockResolvedValue(
       makeGeminiResponse({
         analysis_text: 'Analysis',
         chart_type: 'bar',
         chart_data: [
           { name: 'Valid', value: 10 },
-          { value: 20 },           // missing name
-          { name: 'NoValue' },     // missing value
-          null,                    // null entry
+          { value: 20 },           // missing name → defaults to ''
+          { name: 'NoValue' },     // missing value → defaults to 0
+          null,                    // null entry → filtered out
           { name: 'Also Valid', value: 5 },
         ],
         chart_title: 'Title',
@@ -144,10 +144,9 @@ describe('AIAnalysisService.analyze', () => {
     const svc = new AIAnalysisService();
     const result = await svc.analyze('test', makeAggregatedData(), API_KEY);
 
-    expect(result.chart_data).toEqual([
-      { name: 'Valid', value: 10 },
-      { name: 'Also Valid', value: 5 },
-    ]);
+    expect(result.chart_data).toHaveLength(4); // null filtered, rest get defaults
+    expect(result.chart_data[0]).toEqual({ name: 'Valid', value: 10 });
+    expect(result.chart_data[3]).toEqual({ name: 'Also Valid', value: 5 });
   });
 
   it('coerces non-numeric chart_data values to 0', async () => {
@@ -187,7 +186,7 @@ describe('AIAnalysisService.analyze', () => {
 
     const svc = new AIAnalysisService();
     await expect(svc.analyze('test', makeAggregatedData(), API_KEY)).rejects.toThrow(
-      'Respuesta de IA inválida'
+      'Respuesta de IA no es JSON válido'
     );
   });
 
@@ -195,9 +194,8 @@ describe('AIAnalysisService.analyze', () => {
     mockGenerateContent.mockResolvedValue({ text: null });
 
     const svc = new AIAnalysisService();
-    // JSON.parse("{}") has no analysis_text → should throw about missing analysis
     await expect(svc.analyze('test', makeAggregatedData(), API_KEY)).rejects.toThrow(
-      'La respuesta de IA no contiene texto de análisis'
+      'Gemini devolvió una respuesta vacía para el análisis'
     );
   });
 
