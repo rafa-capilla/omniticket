@@ -91,13 +91,17 @@ Los valores en chart_data deben ser numéricos (importes en euros). Incluye entr
         }
       });
 
+      const responseText = response.text ?? '';
+      if (!responseText) {
+        throw new Error("Gemini devolvió una respuesta vacía para el análisis");
+      }
       try {
-        const raw: unknown = JSON.parse(response.text || "{}");
+        const raw: unknown = JSON.parse(responseText);
         return analysisResultSchema.parse(raw);
       } catch (e) {
         if (e instanceof SyntaxError) {
-          console.error("Error parsing AI analysis response:", response.text);
-          throw new Error("Respuesta de IA inválida");
+          console.error("Error parsing AI analysis response (primeros 200 chars):", responseText.slice(0, 200));
+          throw new Error("Respuesta de IA no es JSON válido");
         }
         throw e;
       }
@@ -167,10 +171,14 @@ Los valores en chart_data deben ser numéricos (importes en euros). Incluye entr
       }
     });
 
+    const responseText = response.text ?? '';
+    if (!responseText) {
+      throw new Error("Gemini devolvió una respuesta vacía para la extracción de ticket");
+    }
     try {
-      return JSON.parse(response.text || "{}");
+      return JSON.parse(responseText);
     } catch (e: unknown) {
-      console.error("Fallo al parsear JSON de Gemini:", response.text, e);
+      console.error("Fallo al parsear JSON de Gemini (primeros 200 chars):", responseText.slice(0, 200), e);
       throw new Error(`Respuesta de Gemini no es JSON válido: ${getErrorMessage(e)}`);
     }
   }
