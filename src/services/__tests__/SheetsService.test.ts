@@ -3,11 +3,11 @@ import { SheetsService } from '../SheetsService';
 
 // ─── mock apiFetch ───────────────────────────────────────────────────────────
 
-vi.mock('../apiFetch', () => ({
+vi.mock('@/infrastructure/google-api/apiFetch', () => ({
   apiFetch: vi.fn(),
 }));
 
-import { apiFetch } from '../apiFetch';
+import { apiFetch } from '@/infrastructure/google-api/apiFetch';
 const mockApiFetch = vi.mocked(apiFetch);
 
 const SPREADSHEET_ID = 'test-spreadsheet-id';

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConfigService } from '../ConfigService';
 
-vi.mock('../apiFetch', () => ({
+vi.mock('@/infrastructure/google-api/apiFetch', () => ({
   apiFetch: vi.fn(),
 }));
 
-import { apiFetch } from '../apiFetch';
+import { apiFetch } from '@/infrastructure/google-api/apiFetch';
 const mockApiFetch = vi.mocked(apiFetch);
 
 const TOKEN = 'test-token';
