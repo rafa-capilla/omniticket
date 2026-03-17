@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { Rule, Category } from '@/shared/types/domain';
 import { useApp } from '@/contexts/AppContext';
 import { safeText, getErrorMessage, getActiveCategories } from '@/lib/utils';
-import { useServiceFactory } from '@/presentation/hooks/useServiceFactory';
+import { useServiceFactory } from '@/shared/hooks/useServiceFactory';
 
 interface Props {
   rules: Rule[];
