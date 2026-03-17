@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { Category } from '@/shared/types/domain';
 import { useApp } from '@/contexts/AppContext';
 import { safeText, getErrorMessage } from '@/lib/utils';
-import { useServiceFactory } from '@/presentation/hooks/useServiceFactory';
+import { useServiceFactory } from '@/shared/hooks/useServiceFactory';
 
 interface Props {
   categories: Category[];

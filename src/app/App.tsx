@@ -2,15 +2,15 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { LensType, ViewState } from '@/shared/types/domain';
 import { safeText } from '@/lib/utils';
 import { AppContext } from '@/contexts/AppContext';
-import { ToastItem, ToastList } from '@/components/ToastList';
+import { ToastItem, ToastList } from '@/shared/components/ToastList';
 import { HistoryView } from '@/features/expenses/components/HistoryView';
 import { RulesView } from '@/features/rules/components/RulesView';
 import { LensesView } from '@/features/expenses/components/LensesView';
 import { CategoriesManager } from '@/features/categories/components/CategoriesManager';
 import { SettingsView } from '@/features/settings/components/SettingsView';
-import { useAuth } from '@/presentation/hooks/useAuth';
+import { useAuth } from '@/shared/hooks/useAuth';
 import { useDateFilter } from '@/features/expenses/hooks/useDateFilter';
-import { useAppData } from '@/presentation/hooks/useAppData';
+import { useAppData } from '@/shared/hooks/useAppData';
 import { useSyncEngine } from '@/features/sync/hooks/useSyncEngine';
 
 const CLIENT_ID = '493268705547-fnbs5b5op3e9km8mptiimck61opiuot8.apps.googleusercontent.com';
