@@ -5,7 +5,7 @@ import { AIAnalysisService } from '@/services/AIAnalysisService';
 import { useApp } from '@/contexts/AppContext';
 import { COLORS, getErrorMessage } from '@/lib/utils';
 import { buildAggregatedData } from '@/domain/services/DataAggregator';
-import { useServiceFactory } from '@/presentation/hooks/useServiceFactory';
+import { useServiceFactory } from '@/shared/hooks/useServiceFactory';
 
 interface Props {
   rawLines: string[][];

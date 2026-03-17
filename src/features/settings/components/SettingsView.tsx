@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { safeText, getErrorMessage } from '@/lib/utils';
-import { useServiceFactory } from '@/presentation/hooks/useServiceFactory';
+import { useServiceFactory } from '@/shared/hooks/useServiceFactory';
 
 interface Props {
   onLogout: () => void;
