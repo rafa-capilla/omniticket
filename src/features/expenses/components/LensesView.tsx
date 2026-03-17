@@ -1,8 +1,8 @@
 import React from 'react';
 import type { Rule, Category, LensType } from '@/shared/types/domain';
-import { AIAnalysisView } from '@/components/AIAnalysisView';
+import { AIAnalysisView } from '@/features/expenses/components/AIAnalysisView';
 import { safeText, toLocalDateString } from '@/lib/utils';
-import { useDataAggregation } from '@/presentation/hooks/useDataAggregation';
+import { useDataAggregation } from '@/features/expenses/hooks/useDataAggregation';
 import { KpiDashboard } from '@/presentation/components/KpiDashboard';
 import { PieChartCard } from '@/presentation/components/charts/PieChartCard';
 import { BarChartCard } from '@/presentation/components/charts/BarChartCard';
