@@ -31,7 +31,7 @@ vi.mock('../SheetsService', () => ({
 vi.mock('../ConfigService', () => ({
   ConfigService: function ConfigService() { return mockConfig; },
 }));
-vi.mock('../retry', () => ({
+vi.mock('@/infrastructure/google-api/retry', () => ({
   withRetry: vi.fn((fn: () => Promise<unknown>) => fn()),
 }));
 vi.mock('../../schemas/ticketSchema', () => ({
@@ -39,7 +39,7 @@ vi.mock('../../schemas/ticketSchema', () => ({
 }));
 
 import { SyncEngine } from '../SyncEngine';
-import { withRetry } from '../retry';
+import { withRetry } from '@/infrastructure/google-api/retry';
 import type { OmniSettings, Category, Rule } from '@/shared/types/domain';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
