@@ -2,16 +2,14 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { LensType, ViewState } from '@/shared/types/domain';
 import { safeText } from '@/lib/utils';
 import { AppContext } from '@/contexts/AppContext';
-import { ToastItem, ToastList } from '@/components/ToastList';
-import { HistoryView } from '@/components/HistoryView';
-import { RulesView } from '@/components/RulesView';
-import { LensesView } from '@/components/LensesView';
-import { CategoriesManager } from '@/components/CategoriesManager';
-import { SettingsView } from '@/components/SettingsView';
-import { useAuth } from '@/presentation/hooks/useAuth';
-import { useDateFilter } from '@/presentation/hooks/useDateFilter';
-import { useAppData } from '@/presentation/hooks/useAppData';
-import { useSyncEngine } from '@/presentation/hooks/useSyncEngine';
+import { ToastItem, ToastList } from '@/shared/components/ToastList';
+import { LensesView, HistoryView, useDateFilter } from '@/features/expenses';
+import { RulesView } from '@/features/rules';
+import { CategoriesManager } from '@/features/categories';
+import { SettingsView } from '@/features/settings';
+import { useSyncEngine } from '@/features/sync';
+import { useAuth } from '@/shared/hooks/useAuth';
+import { useAppData } from '@/shared/hooks/useAppData';
 
 const CLIENT_ID = '493268705547-fnbs5b5op3e9km8mptiimck61opiuot8.apps.googleusercontent.com';
 

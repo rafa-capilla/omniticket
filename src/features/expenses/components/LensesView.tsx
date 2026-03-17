@@ -1,11 +1,11 @@
 import React from 'react';
 import type { Rule, Category, LensType } from '@/shared/types/domain';
-import { AIAnalysisView } from '@/components/AIAnalysisView';
+import { AIAnalysisView } from '@/features/expenses/components/AIAnalysisView';
 import { safeText, toLocalDateString } from '@/lib/utils';
-import { useDataAggregation } from '@/presentation/hooks/useDataAggregation';
-import { KpiDashboard } from '@/presentation/components/KpiDashboard';
-import { PieChartCard } from '@/presentation/components/charts/PieChartCard';
-import { BarChartCard } from '@/presentation/components/charts/BarChartCard';
+import { useDataAggregation } from '@/features/expenses/hooks/useDataAggregation';
+import { KpiDashboard } from '@/features/expenses/components/KpiDashboard';
+import { PieChartCard } from '@/features/expenses/components/charts/PieChartCard';
+import { BarChartCard } from '@/features/expenses/components/charts/BarChartCard';
 
 interface Props {
   currentLens: LensType;
