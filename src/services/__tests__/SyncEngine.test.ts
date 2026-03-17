@@ -8,10 +8,16 @@ const mockGmail = {
   addLabelToThread: vi.fn().mockResolvedValue(undefined),
 };
 
-const mockSheets = {
-  getCategories: vi.fn(),
-  getRules: vi.fn(),
+const mockExpenses = {
   appendExpense: vi.fn().mockResolvedValue(undefined),
+};
+
+const mockCategories = {
+  getCategories: vi.fn(),
+};
+
+const mockRules = {
+  getRules: vi.fn(),
 };
 
 const mockConfig = {
@@ -22,24 +28,30 @@ const mockConfig = {
 
 // ─── Module mocks (use function keyword for new-ability) ─────────────────────
 
-vi.mock('../GmailService', () => ({
-  GmailService: function GmailService() { return mockGmail; },
+vi.mock('@/infrastructure/google-api/GmailGateway', () => ({
+  GmailGateway: function GmailGateway() { return mockGmail; },
 }));
-vi.mock('../SheetsService', () => ({
-  SheetsService: function SheetsService() { return mockSheets; },
+vi.mock('@/infrastructure/google-api/GeminiGateway', () => ({
+  GeminiGateway: function GeminiGateway() { return {}; },
+}));
+vi.mock('@/infrastructure/google-api/SheetsExpenseRepo', () => ({
+  SheetsExpenseRepo: function SheetsExpenseRepo() { return mockExpenses; },
+}));
+vi.mock('@/infrastructure/google-api/SheetsCategoryRepo', () => ({
+  SheetsCategoryRepo: function SheetsCategoryRepo() { return mockCategories; },
+}));
+vi.mock('@/infrastructure/google-api/SheetsRuleRepo', () => ({
+  SheetsRuleRepo: function SheetsRuleRepo() { return mockRules; },
 }));
 vi.mock('../ConfigService', () => ({
   ConfigService: function ConfigService() { return mockConfig; },
 }));
-vi.mock('../retry', () => ({
+vi.mock('@/infrastructure/google-api/retry', () => ({
   withRetry: vi.fn((fn: () => Promise<unknown>) => fn()),
-}));
-vi.mock('../../schemas/ticketSchema', () => ({
-  ticketSchema: { parse: vi.fn((v: unknown) => v) },
 }));
 
 import { SyncEngine } from '../SyncEngine';
-import { withRetry } from '../retry';
+import { withRetry } from '@/infrastructure/google-api/retry';
 import type { OmniSettings, Category, Rule } from '@/shared/types/domain';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -80,9 +92,9 @@ beforeEach(() => {
   mockGmail.searchThreads.mockResolvedValue([]);
   mockGmail.getThreadContent.mockResolvedValue('email content');
   mockGmail.addLabelToThread.mockResolvedValue(undefined);
-  mockSheets.getCategories.mockResolvedValue(defaultCategories);
-  mockSheets.getRules.mockResolvedValue(defaultRules);
-  mockSheets.appendExpense.mockResolvedValue(undefined);
+  mockCategories.getCategories.mockResolvedValue(defaultCategories);
+  mockRules.getRules.mockResolvedValue(defaultRules);
+  mockExpenses.appendExpense.mockResolvedValue(undefined);
   mockConfig.getOrFindId.mockResolvedValue('spreadsheet-123');
   mockConfig.getSettings.mockResolvedValue(defaultSettings);
   mockConfig.updateLastSync.mockResolvedValue(undefined);
@@ -141,7 +153,7 @@ describe('SyncEngine.runSync', () => {
     const results = await engine.runSync();
 
     expect(results).toEqual([{ messageId: 'thread-1', status: 'success' }]);
-    expect(mockSheets.appendExpense).toHaveBeenCalledWith('spreadsheet-123', ticketData);
+    expect(mockExpenses.appendExpense).toHaveBeenCalledWith('spreadsheet-123', ticketData);
     expect(mockGmail.addLabelToThread).toHaveBeenCalledWith('thread-1', 'OmniTicket/Procesado');
     expect(mockConfig.updateLastSync).toHaveBeenCalledTimes(1);
   });
@@ -179,7 +191,7 @@ describe('SyncEngine.runSync', () => {
     expect(results[2]).toEqual({ messageId: 'thread-3', status: 'success' });
 
     expect(mockGmail.addLabelToThread).toHaveBeenCalledTimes(2);
-    expect(mockSheets.appendExpense).toHaveBeenCalledTimes(2);
+    expect(mockExpenses.appendExpense).toHaveBeenCalledTimes(2);
   });
 
   it('reports completion summary with all successes', async () => {
@@ -226,14 +238,14 @@ describe('SyncEngine.runSync', () => {
     const engine = new SyncEngine(TOKEN);
     await engine.runSync();
 
-    expect(mockSheets.getCategories).toHaveBeenCalledWith('spreadsheet-123');
-    expect(mockSheets.getRules).toHaveBeenCalledWith('spreadsheet-123');
+    expect(mockCategories.getCategories).toHaveBeenCalledWith('spreadsheet-123');
+    expect(mockRules.getRules).toHaveBeenCalledWith('spreadsheet-123');
   });
 
   it('does not label thread as processed when appendExpense fails', async () => {
     mockGmail.searchThreads.mockResolvedValue(['thread-1']);
     vi.mocked(withRetry).mockResolvedValue(makeTicket());
-    mockSheets.appendExpense.mockRejectedValue(new Error('Sheets API error'));
+    mockExpenses.appendExpense.mockRejectedValue(new Error('Sheets API error'));
 
     const engine = new SyncEngine(TOKEN);
     const results = await engine.runSync();
