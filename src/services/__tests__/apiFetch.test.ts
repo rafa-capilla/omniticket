@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { apiFetch } from '../apiFetch';
+import { apiFetch, extractGoogleApiErrorMessage } from '../apiFetch';
 
 // ─── apiFetch ─────────────────────────────────────────────────────────────────
 
@@ -78,5 +78,66 @@ describe('apiFetch', () => {
       method: 'POST',
       headers: { Authorization: 'Bearer token123' },
     });
+  });
+});
+
+// ─── extractGoogleApiErrorMessage ────────────────────────────────────────────
+
+describe('extractGoogleApiErrorMessage', () => {
+  it('extracts error.message from a standard Google API error response', async () => {
+    const body = { error: { message: 'Spreadsheet not found', code: 404 } };
+    const res = new Response(JSON.stringify(body), { status: 404 });
+
+    const msg = await extractGoogleApiErrorMessage(res, 404);
+
+    expect(msg).toBe('Spreadsheet not found');
+  });
+
+  it('returns fallback when body has no error field', async () => {
+    const res = new Response(JSON.stringify({ unexpected: true }), { status: 403 });
+
+    const msg = await extractGoogleApiErrorMessage(res, 403);
+
+    expect(msg).toBe('Error HTTP 403');
+  });
+
+  it('returns fallback when error field is not an object', async () => {
+    const res = new Response(JSON.stringify({ error: 'string error' }), { status: 500 });
+
+    const msg = await extractGoogleApiErrorMessage(res, 500);
+
+    expect(msg).toBe('Error HTTP 500');
+  });
+
+  it('returns fallback when error.message is not a string', async () => {
+    const res = new Response(JSON.stringify({ error: { message: 42 } }), { status: 400 });
+
+    const msg = await extractGoogleApiErrorMessage(res, 400);
+
+    expect(msg).toBe('Error HTTP 400');
+  });
+
+  it('returns fallback when body is not valid JSON', async () => {
+    const res = new Response('not json', { status: 500 });
+
+    const msg = await extractGoogleApiErrorMessage(res, 500);
+
+    expect(msg).toBe('Error HTTP 500');
+  });
+
+  it('returns fallback when body is null JSON', async () => {
+    const res = new Response('null', { status: 500 });
+
+    const msg = await extractGoogleApiErrorMessage(res, 500);
+
+    expect(msg).toBe('Error HTTP 500');
+  });
+
+  it('returns fallback when error field is null', async () => {
+    const res = new Response(JSON.stringify({ error: null }), { status: 500 });
+
+    const msg = await extractGoogleApiErrorMessage(res, 500);
+
+    expect(msg).toBe('Error HTTP 500');
   });
 });
