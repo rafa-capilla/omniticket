@@ -9,15 +9,29 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
   if (!res.ok) {
     if (res.status === 401) throw new Error("401");
     if (res.status === 429) throw new Error("Rate limit alcanzado. Espera unos segundos e inténtalo de nuevo.");
-    const body: unknown = await res.json().catch(() => null);
-    const error = (body !== null && typeof body === 'object' && 'error' in body)
-      ? (body as Record<string, unknown>).error
-      : undefined;
-    const errorMessage = (error !== null && typeof error === 'object' && error !== undefined && 'message' in error)
-      ? (error as Record<string, unknown>).message
-      : undefined;
-    const msg = typeof errorMessage === 'string' ? errorMessage : `Error HTTP ${res.status}`;
+    const msg = await extractGoogleApiErrorMessage(res, res.status);
     throw new Error(msg);
   }
   return res;
+}
+
+/**
+ * Extracts a human-readable error message from a Google API JSON error response.
+ * Google APIs return errors in the shape: { error: { message: string, ... } }
+ * Falls back to a generic "Error HTTP {status}" if parsing fails.
+ */
+export async function extractGoogleApiErrorMessage(res: Response, status: number): Promise<string> {
+  const fallback = `Error HTTP ${status}`;
+  try {
+    const body: unknown = await res.json();
+    if (body === null || typeof body !== 'object') return fallback;
+
+    const errorField = (body as Record<string, unknown>).error;
+    if (errorField === null || errorField === undefined || typeof errorField !== 'object') return fallback;
+
+    const message = (errorField as Record<string, unknown>).message;
+    return typeof message === 'string' ? message : fallback;
+  } catch {
+    return fallback;
+  }
 }

@@ -3,6 +3,7 @@ import type { TicketData, Category, Rule, AggregatedData, AIAnalysisResult } fro
 import { analysisResultSchema } from '@/schemas/analysisSchema';
 import { withRetry } from '@/infrastructure/google-api/retry';
 import { getErrorMessage, getActiveCategories } from '@/lib/utils';
+import { GEMINI_MODEL } from '@/lib/constants';
 import { validateTicketData, recalculateLineTotals } from '@/domain/services/TicketValidator';
 import { applyRulesToItems } from '@/domain/services/RuleEngine';
 import type { AIGateway } from '@/application/ports/AIGateway';
@@ -61,7 +62,7 @@ ${data.byStore.map(s => `- ${s.name}: ${s.total.toFixed(2)}€`).join('\n')}`;
     const ai = new GoogleGenAI({ apiKey });
     return withRetry(async () => {
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-pro",
+        model: GEMINI_MODEL,
         contents: `${prompt}\n\n${dataContext}${lineItemsSection}`,
         config: {
           systemInstruction: `Eres un experto en análisis de gastos de supermercado. Analiza los datos del usuario y responde a su consulta de forma concisa, útil y en español.
@@ -121,7 +122,7 @@ Los valores en chart_data deben ser numéricos (importes en euros). Incluye entr
 
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
+      model: GEMINI_MODEL,
       contents: `Analiza el contenido de este email y extrae los datos del ticket de compra.
       UUID para el ticket: ${uuid}
 

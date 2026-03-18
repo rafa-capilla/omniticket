@@ -8,13 +8,25 @@ import { z } from 'zod';
  * Uses .pipe() and .coerce where needed because Gemini may return slightly
  * malformed data (e.g. string where number expected, null entries in arrays).
  */
-export const analysisChartItemSchema = z.object({
-  name: z.string().default(''),
-  value: z.unknown().transform((val): number => {
-    if (typeof val === 'number' && !Number.isNaN(val)) return val;
-    const num = Number(val);
+/**
+ * Coerces a Gemini chart value to number. Accepts:
+ * - number: passed through (NaN → 0)
+ * - string: parsed as float (unparseable → 0)
+ * - null/undefined/other: falls back to 0
+ */
+const coerceChartValue = z.union([
+  z.number(),
+  z.string().transform((val): number => {
+    const num = parseFloat(val);
     return Number.isNaN(num) ? 0 : num;
   }),
+  z.null().transform((): number => 0),
+  z.undefined().transform((): number => 0),
+]).pipe(z.number().transform(n => Number.isNaN(n) ? 0 : n));
+
+export const analysisChartItemSchema = z.object({
+  name: z.string().default(''),
+  value: coerceChartValue,
 });
 
 export const analysisResultSchema = z.object({

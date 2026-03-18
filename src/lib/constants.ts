@@ -34,6 +34,11 @@ export const DEFAULT_CATEGORY_NAMES = [
 
 export type DefaultCategoryName = (typeof DEFAULT_CATEGORY_NAMES)[number];
 
+// ─── AI Model ────────────────────────────────────────────────────────────────
+
+/** Gemini model identifier — single source of truth for all AI calls. */
+export const GEMINI_MODEL = 'gemini-2.5-pro' as const;
+
 // ─── API Base URLs ────────────────────────────────────────────────────────────
 
 export const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets' as const;
