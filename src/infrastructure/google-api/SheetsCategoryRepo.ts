@@ -1,15 +1,20 @@
 import type { Category } from '@/shared/types/domain';
-import type { SheetsValuesResponse, SheetsMetadataResponse } from '@/shared/types/google-api';
+import type { SheetsValuesResponse } from '@/shared/types/google-api';
 import { GastosCol, SHEETS_API, SheetName } from '@/lib/constants';
 import { authHeaders, jsonAuthHeaders, catchNonAuth } from '@/lib/utils';
 import { apiFetch } from '@/infrastructure/google-api/apiFetch';
+import { SheetsHelpers } from '@/infrastructure/google-api/SheetsHelpers';
 import type { CategoryRepository } from '@/application/ports/CategoryRepository';
 
 /**
  * Implements CategoryRepository using Google Sheets API.
  */
 export class SheetsCategoryRepo implements CategoryRepository {
-  constructor(private accessToken: string) {}
+  private readonly helpers: SheetsHelpers;
+
+  constructor(private accessToken: string) {
+    this.helpers = new SheetsHelpers(accessToken);
+  }
 
   private get auth()     { return authHeaders(this.accessToken); }
   private get jsonAuth() { return jsonAuthHeaders(this.accessToken); }
@@ -47,9 +52,9 @@ export class SheetsCategoryRepo implements CategoryRepository {
   }
 
   async deleteCategory(spreadsheetId: string, rowIndex: number): Promise<void> {
-    const sheetId = await this.getSheetNumericId(spreadsheetId, SheetName.CATEGORIES);
+    const sheetId = await this.helpers.getSheetNumericId(spreadsheetId, SheetName.CATEGORIES, 'SheetsCategoryRepo');
     if (sheetId === null) return;
-    await this.deleteRow(spreadsheetId, sheetId, rowIndex);
+    await this.helpers.deleteRow(spreadsheetId, sheetId, rowIndex);
   }
 
   async updateCategoryInGastos(spreadsheetId: string, oldName: string, newName: string): Promise<void> {
@@ -76,34 +81,4 @@ export class SheetsCategoryRepo implements CategoryRepository {
     );
   }
 
-  private async deleteRow(spreadsheetId: string, sheetId: number, rowIndex: number): Promise<void> {
-    await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}:batchUpdate`,
-      {
-        method: 'POST',
-        headers: this.jsonAuth,
-        body: JSON.stringify({
-          requests: [{
-            deleteDimension: {
-              range: { sheetId, dimension: 'ROWS', startIndex: rowIndex - 1, endIndex: rowIndex }
-            }
-          }]
-        })
-      }
-    );
-  }
-
-  private async getSheetNumericId(spreadsheetId: string, sheetName: string): Promise<number | null> {
-    try {
-      const response = await apiFetch(
-        `${SHEETS_API}/${spreadsheetId}?fields=sheets.properties`,
-        { headers: this.auth }
-      );
-      const data: SheetsMetadataResponse = await response.json();
-      const sheet = (data.sheets ?? []).find(s => s.properties?.title === sheetName);
-      return sheet?.properties?.sheetId ?? null;
-    } catch (err) {
-      return catchNonAuth(err, `[SheetsCategoryRepo] getSheetNumericId('${sheetName}') failed:`, null);
-    }
-  }
 }

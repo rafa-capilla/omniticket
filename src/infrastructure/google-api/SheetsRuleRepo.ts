@@ -1,15 +1,20 @@
 import type { Rule } from '@/shared/types/domain';
-import type { SheetsValuesResponse, SheetsMetadataResponse } from '@/shared/types/google-api';
+import type { SheetsValuesResponse } from '@/shared/types/google-api';
 import { SHEETS_API, SheetName } from '@/lib/constants';
 import { authHeaders, jsonAuthHeaders, catchNonAuth } from '@/lib/utils';
 import { apiFetch } from '@/infrastructure/google-api/apiFetch';
+import { SheetsHelpers } from '@/infrastructure/google-api/SheetsHelpers';
 import type { RuleRepository } from '@/application/ports/RuleRepository';
 
 /**
  * Implements RuleRepository using Google Sheets API.
  */
 export class SheetsRuleRepo implements RuleRepository {
-  constructor(private accessToken: string) {}
+  private readonly helpers: SheetsHelpers;
+
+  constructor(private accessToken: string) {
+    this.helpers = new SheetsHelpers(accessToken);
+  }
 
   private get auth()     { return authHeaders(this.accessToken); }
   private get jsonAuth() { return jsonAuthHeaders(this.accessToken); }
@@ -47,39 +52,8 @@ export class SheetsRuleRepo implements RuleRepository {
   }
 
   async deleteRule(spreadsheetId: string, rowIndex: number): Promise<void> {
-    const sheetId = await this.getSheetNumericId(spreadsheetId, SheetName.RULES);
+    const sheetId = await this.helpers.getSheetNumericId(spreadsheetId, SheetName.RULES, 'SheetsRuleRepo');
     if (sheetId === null) return;
-    await this.deleteRow(spreadsheetId, sheetId, rowIndex);
-  }
-
-  private async deleteRow(spreadsheetId: string, sheetId: number, rowIndex: number): Promise<void> {
-    await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}:batchUpdate`,
-      {
-        method: 'POST',
-        headers: this.jsonAuth,
-        body: JSON.stringify({
-          requests: [{
-            deleteDimension: {
-              range: { sheetId, dimension: 'ROWS', startIndex: rowIndex - 1, endIndex: rowIndex }
-            }
-          }]
-        })
-      }
-    );
-  }
-
-  private async getSheetNumericId(spreadsheetId: string, sheetName: string): Promise<number | null> {
-    try {
-      const response = await apiFetch(
-        `${SHEETS_API}/${spreadsheetId}?fields=sheets.properties`,
-        { headers: this.auth }
-      );
-      const data: SheetsMetadataResponse = await response.json();
-      const sheet = (data.sheets ?? []).find(s => s.properties?.title === sheetName);
-      return sheet?.properties?.sheetId ?? null;
-    } catch (err) {
-      return catchNonAuth(err, `[SheetsRuleRepo] getSheetNumericId('${sheetName}') failed:`, null);
-    }
+    await this.helpers.deleteRow(spreadsheetId, sheetId, rowIndex);
   }
 }

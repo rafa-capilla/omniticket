@@ -58,6 +58,7 @@ export function useAppData(
         toast.error('Sesión expirada. Haz clic en "Reconectar" para continuar.');
       } else {
         console.error('Error al cargar datos', err);
+        toast.error(`Error al cargar datos: ${msg}`);
       }
     }
   }, [token, dbId, toast]);
