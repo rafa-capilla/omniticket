@@ -19,6 +19,13 @@ export const GastosCol = {
 } as const;
 
 /**
+ * Spreadsheet column letter for the Categoría column in the Gastos sheet.
+ * Derived from GastosCol.CATEGORIA (0-based index 4 → 'E').
+ * Used by SheetsCategoryRepo.updateCategoryInGastos for range-based updates.
+ */
+export const GASTOS_CATEGORIA_COL_LETTER = String.fromCharCode(65 + GastosCol.CATEGORIA) as 'E';
+
+/**
  * Default category names used as fallback when no user-defined categories are
  * loaded from the spreadsheet (e.g. first sync before Categories sheet exists).
  */
