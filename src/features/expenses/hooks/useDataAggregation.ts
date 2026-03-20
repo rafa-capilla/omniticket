@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { Rule, Category, LensType, DashboardStats } from '@/shared/types/domain';
-import { GastosCol } from '@/lib/constants';
+import { GastosCol, TOTAL_TICKET_MARKER } from '@/lib/constants';
 import { applyRulesToRows } from '@/domain/services/RuleEngine';
 import { calculateKPIs, aggregateByLens, filterByDateRange } from '@/domain/services/DataAggregator';
 
@@ -36,7 +36,7 @@ export function useDataAggregation(
     return applyRulesToRows(
       filtered, rules,
       GastosCol.PRODUCTO, GastosCol.CATEGORIA, GastosCol.NOMBRE_NORM,
-      '--- TOTAL TICKET ---',
+      TOTAL_TICKET_MARKER,
     );
   }, [rawLines, dateRange, rules]);
 

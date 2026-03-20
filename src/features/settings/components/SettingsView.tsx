@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { safeText, getErrorMessage } from '@/lib/utils';
+import { GEMINI_MODEL } from '@/lib/constants';
 import { useServiceFactory } from '@/shared/hooks/useServiceFactory';
 
 interface Props {
@@ -68,7 +69,7 @@ export const SettingsView: React.FC<Props> = ({ onLogout }) => {
           <label className="text-[10px] font-black uppercase text-slate-600 tracking-widest ml-4">Gemini AI</label>
           <div className="bg-slate-900/50 border border-white/5 px-8 py-6 rounded-3xl flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500">Motor de IA</span>
-            <span className="text-[9px] font-black uppercase px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20">Gemini 2.5 Pro</span>
+            <span className="text-[9px] font-black uppercase px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20">{GEMINI_MODEL}</span>
           </div>
         </div>
 

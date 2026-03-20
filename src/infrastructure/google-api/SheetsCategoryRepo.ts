@@ -1,6 +1,6 @@
 import type { Category } from '@/shared/types/domain';
 import type { SheetsValuesResponse } from '@/shared/types/google-api';
-import { GastosCol, SHEETS_API, SheetName } from '@/lib/constants';
+import { GastosCol, SHEETS_API, SheetName, GASTOS_CATEGORIA_COL_LETTER } from '@/lib/constants';
 import { authHeaders, jsonAuthHeaders, catchNonAuth } from '@/lib/utils';
 import { apiFetch } from '@/infrastructure/google-api/apiFetch';
 import { SheetsHelpers } from '@/infrastructure/google-api/SheetsHelpers';
@@ -69,7 +69,7 @@ export class SheetsCategoryRepo implements CategoryRepository {
     rows.forEach((row: string[], index: number) => {
       const rowNum = index + 2;
       if ((row[GastosCol.CATEGORIA] ?? '') === oldName) {
-        batchData.push({ range: `${SheetName.GASTOS}!E${rowNum}`, values: [[newName]] });
+        batchData.push({ range: `${SheetName.GASTOS}!${GASTOS_CATEGORIA_COL_LETTER}${rowNum}`, values: [[newName]] });
       }
     });
 
