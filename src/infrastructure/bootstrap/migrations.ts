@@ -3,6 +3,7 @@ import { TOTAL_TICKET_MARKER, GastosCol, SHEETS_API, SheetName } from '@/lib/con
 import { safeNum, authHeaders, jsonAuthHeaders } from '@/lib/utils';
 import { apiFetch } from '@/infrastructure/google-api/apiFetch';
 import { DatabaseBootstrap } from './DatabaseBootstrap';
+import { isAuthError } from '@/domain/errors';
 
 /**
  * Runs all idempotent migrations on an existing spreadsheet.
@@ -24,8 +25,7 @@ export async function runMigrations(accessToken: string, spreadsheetId: string):
     await migrateDiscountFix(spreadsheetId, auth, jsonAuth);
     await migrateNormalizedHeader(spreadsheetId, auth, jsonAuth);
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (msg === '401') throw e;
+    if (isAuthError(e)) throw e;
     console.error("Error en runMigrations:", e);
   }
 }

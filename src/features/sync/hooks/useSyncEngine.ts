@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { SyncEngine } from '@/services/SyncEngine';
 import { safeText, getErrorMessage } from '@/lib/utils';
+import { isAuthError } from '@/domain/errors';
 
 interface UseSyncEngineResult {
   isSyncing: boolean;
@@ -29,11 +30,10 @@ export function useSyncEngine(
       await loadData();
       toast.success('Sincronización completada.');
     } catch (err: unknown) {
-      const msg = getErrorMessage(err);
-      if (msg === '401') {
+      if (isAuthError(err)) {
         toast.error('Sesión expirada. Haz clic en "Reconectar" para continuar.');
       } else {
-        toast.error('Error en sync: ' + msg);
+        toast.error('Error en sync: ' + getErrorMessage(err));
       }
     } finally {
       setIsSyncing(false);

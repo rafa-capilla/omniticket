@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { safeText, safeNum, toLocalDateString, getErrorMessage, roundCurrency, catchNonAuth, aggregateByKey, matchRule, getActiveCategories } from '../utils';
 import type { Rule, Category } from '@/shared/types/domain';
+import { AuthExpiredError } from '@/domain/errors';
 
 // ─── safeText ────────────────────────────────────────────────────────────────
 
@@ -150,9 +151,9 @@ describe('getErrorMessage', () => {
 // ─── catchNonAuth ────────────────────────────────────────────────────────────
 
 describe('catchNonAuth', () => {
-  it('re-throws 401 errors', () => {
-    const err = new Error('401');
-    expect(() => catchNonAuth(err, 'test', [])).toThrow('401');
+  it('re-throws AuthExpiredError', () => {
+    const err = new AuthExpiredError();
+    expect(() => catchNonAuth(err, 'test', [])).toThrow(AuthExpiredError);
   });
 
   it('returns fallback for non-401 Error', () => {

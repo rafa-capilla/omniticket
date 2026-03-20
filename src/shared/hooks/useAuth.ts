@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleAuthService } from '@/services/GoogleAuthService';
 import { ConfigService } from '@/services/ConfigService';
 import { getErrorMessage } from '@/lib/utils';
+import { isAuthError } from '@/domain/errors';
 
 type AppState = 'LOGIN' | 'LOADING' | 'READY';
 
@@ -75,10 +76,9 @@ export function useAuth(
       setAppState('READY');
       isBootstrapped.current = true;
     } catch (err: unknown) {
-      const msg = getErrorMessage(err);
-      if (msg === '401') handleLogout();
+      if (isAuthError(err)) handleLogout();
       else {
-        toast.error('Error al inicializar: ' + msg);
+        toast.error('Error al inicializar: ' + getErrorMessage(err));
         setAppState('LOGIN');
       }
     }

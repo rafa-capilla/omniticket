@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { apiFetch, extractGoogleApiErrorMessage } from '../apiFetch';
+import { AuthExpiredError, RateLimitError } from '@/domain/errors';
 
 // ─── apiFetch ─────────────────────────────────────────────────────────────────
 
@@ -19,20 +20,20 @@ describe('apiFetch', () => {
     expect(body.data).toBe('ok');
   });
 
-  it('throws Error("401") on a 401 response', async () => {
+  it('throws AuthExpiredError on a 401 response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('Unauthorized', { status: 401 })
     );
 
-    await expect(apiFetch('https://example.com/api')).rejects.toThrow('401');
+    await expect(apiFetch('https://example.com/api')).rejects.toThrow(AuthExpiredError);
   });
 
-  it('throws a rate-limit error on a 429 response', async () => {
+  it('throws RateLimitError on a 429 response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('Too Many Requests', { status: 429 })
     );
 
-    await expect(apiFetch('https://example.com/api')).rejects.toThrow('Rate limit');
+    await expect(apiFetch('https://example.com/api')).rejects.toThrow(RateLimitError);
   });
 
   it('extracts error.message from Google API JSON error body', async () => {

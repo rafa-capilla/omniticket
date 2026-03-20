@@ -1,5 +1,6 @@
 import type { Rule, Category, GastosRow } from '@/shared/types/domain';
 import { DEFAULT_CATEGORY_NAMES, GastosCol } from '@/lib/constants';
+import { isAuthError } from '@/domain/errors';
 
 export const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
 
@@ -39,7 +40,7 @@ export const jsonAuthHeaders = (token: string): HeadersInit =>
  * Consolidates the repeated catch pattern across service methods.
  */
 export function catchNonAuth<T>(err: unknown, context: string, fallback: T): T {
-  if (err instanceof Error && err.message === '401') throw err;
+  if (isAuthError(err)) throw err;
   console.error(context, err);
   return fallback;
 }

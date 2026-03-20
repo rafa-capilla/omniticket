@@ -21,17 +21,21 @@ export const SettingsView: React.FC<Props> = ({ onLogout }) => {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    config.getSettings(dbId).then(s => {
-      setSettings({
-        GMAIL_SEARCH_LABEL: s.GMAIL_SEARCH_LABEL,
-        GMAIL_PROCESSED_LABEL: s.GMAIL_PROCESSED_LABEL,
-        GEMINI_API_KEY: s.GEMINI_API_KEY,
-      });
-      setLoaded(true);
-    }).catch((err: unknown) => {
-      console.error('[SettingsView] getSettings failed:', err);
-      toast.error('Error al cargar la configuración: ' + getErrorMessage(err));
-    });
+    const loadSettings = async () => {
+      try {
+        const s = await config.getSettings(dbId);
+        setSettings({
+          GMAIL_SEARCH_LABEL: s.GMAIL_SEARCH_LABEL,
+          GMAIL_PROCESSED_LABEL: s.GMAIL_PROCESSED_LABEL,
+          GEMINI_API_KEY: s.GEMINI_API_KEY,
+        });
+        setLoaded(true);
+      } catch (err: unknown) {
+        console.error('[SettingsView] getSettings failed:', err);
+        toast.error('Error al cargar la configuración: ' + getErrorMessage(err));
+      }
+    };
+    loadSettings();
   }, [config, dbId, toast]);
 
   const handleSave = async () => {

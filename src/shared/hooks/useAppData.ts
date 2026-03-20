@@ -3,6 +3,7 @@ import { SheetsService } from '@/services/SheetsService';
 import type { HistoryTicket, Rule, Category } from '@/shared/types/domain';
 import { safeText, getErrorMessage, aggregateByKey, parseGastosRow } from '@/lib/utils';
 import { TOTAL_TICKET_MARKER, GastosCol } from '@/lib/constants';
+import { isAuthError } from '@/domain/errors';
 
 interface UseAppDataResult {
   rawLines: string[][];
@@ -53,12 +54,11 @@ export function useAppData(
       });
       setHistory(Array.from(historyMap.values()).sort((a, b) => b.fecha.localeCompare(a.fecha)));
     } catch (err: unknown) {
-      const msg = getErrorMessage(err);
-      if (msg === '401') {
+      if (isAuthError(err)) {
         toast.error('Sesión expirada. Haz clic en "Reconectar" para continuar.');
       } else {
         console.error('Error al cargar datos', err);
-        toast.error(`Error al cargar datos: ${msg}`);
+        toast.error(`Error al cargar datos: ${getErrorMessage(err)}`);
       }
     }
   }, [token, dbId, toast]);

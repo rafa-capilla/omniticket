@@ -3,6 +3,7 @@ import { ManageCategories } from '../ManageCategories';
 import type { CategoryRepository } from '@/application/ports/CategoryRepository';
 import type { RuleRepository } from '@/application/ports/RuleRepository';
 import type { Rule, Category } from '@/shared/types/domain';
+import { AuthExpiredError } from '@/domain/errors';
 
 function createMockCategoryRepo(overrides?: Partial<CategoryRepository>): CategoryRepository {
   return {
@@ -130,11 +131,11 @@ describe('ManageCategories', () => {
     it('propagates errors from rule repository', async () => {
       const catRepo = createMockCategoryRepo();
       const ruleRepo = createMockRuleRepo();
-      (ruleRepo.getRules as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('401'));
+      (ruleRepo.getRules as ReturnType<typeof vi.fn>).mockRejectedValue(new AuthExpiredError());
       const uc = new ManageCategories(catRepo, ruleRepo);
 
       await expect(uc.deleteWithCascade(SPREADSHEET_ID, 3, 'Limpieza', 'Otros'))
-        .rejects.toThrow('401');
+        .rejects.toThrow(AuthExpiredError);
     });
   });
 });

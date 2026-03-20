@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { withRetry } from '../retry';
+import { RateLimitError } from '@/domain/errors';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -15,23 +16,10 @@ describe('withRetry', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it('retries when the error message contains "429"', async () => {
+  it('retries when the error is a RateLimitError', async () => {
     vi.useFakeTimers();
     const fn = vi.fn()
-      .mockRejectedValueOnce(new Error('Error 429: quota exceeded'))
-      .mockResolvedValue('ok');
-
-    const promise = withRetry(fn);
-    await vi.runAllTimersAsync();
-
-    expect(await promise).toBe('ok');
-    expect(fn).toHaveBeenCalledTimes(2);
-  });
-
-  it('retries when the error message contains "Rate limit"', async () => {
-    vi.useFakeTimers();
-    const fn = vi.fn()
-      .mockRejectedValueOnce(new Error('Rate limit alcanzado. Espera unos segundos.'))
+      .mockRejectedValueOnce(new RateLimitError())
       .mockResolvedValue('ok');
 
     const promise = withRetry(fn);
@@ -56,14 +44,12 @@ describe('withRetry', () => {
   it('throws after exhausting all attempts when every call hits a rate-limit', async () => {
     vi.useFakeTimers();
     const fn = vi.fn()
-      .mockRejectedValueOnce(new Error('429 quota exceeded'))
-      .mockRejectedValueOnce(new Error('429 quota exceeded'))
-      .mockRejectedValueOnce(new Error('429 quota exceeded'));
+      .mockRejectedValueOnce(new RateLimitError())
+      .mockRejectedValueOnce(new RateLimitError())
+      .mockRejectedValueOnce(new RateLimitError());
 
     const promise = withRetry(fn, 3);
-    // Attach the rejection handler BEFORE advancing timers so the rejection
-    // is never left unhandled between runAllTimersAsync() completing and our await.
-    const assertion = expect(promise).rejects.toThrow('429 quota exceeded');
+    const assertion = expect(promise).rejects.toThrow(RateLimitError);
     await vi.runAllTimersAsync();
     await assertion;
 
@@ -73,8 +59,8 @@ describe('withRetry', () => {
   it('succeeds on the last allowable attempt', async () => {
     vi.useFakeTimers();
     const fn = vi.fn()
-      .mockRejectedValueOnce(new Error('429'))
-      .mockRejectedValueOnce(new Error('429'))
+      .mockRejectedValueOnce(new RateLimitError())
+      .mockRejectedValueOnce(new RateLimitError())
       .mockResolvedValue('last chance');
 
     const promise = withRetry(fn, 3);
@@ -89,8 +75,8 @@ describe('withRetry', () => {
     const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
 
     const fn = vi.fn()
-      .mockRejectedValueOnce(new Error('429'))
-      .mockRejectedValueOnce(new Error('429'))
+      .mockRejectedValueOnce(new RateLimitError())
+      .mockRejectedValueOnce(new RateLimitError())
       .mockResolvedValue('ok');
 
     const promise = withRetry(fn, 3);

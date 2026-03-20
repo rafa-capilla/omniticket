@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SheetsService } from '../SheetsService';
+import { AuthExpiredError } from '@/domain/errors';
 
 // ─── mock apiFetch ───────────────────────────────────────────────────────────
 
@@ -84,10 +85,10 @@ describe('SheetsService.getCategories', () => {
   });
 
   it('propagates 401 auth errors instead of swallowing them', async () => {
-    mockApiFetch.mockRejectedValue(new Error('401'));
+    mockApiFetch.mockRejectedValue(new AuthExpiredError());
 
     const sheets = new SheetsService(TOKEN);
-    await expect(sheets.getCategories(SPREADSHEET_ID)).rejects.toThrow('401');
+    await expect(sheets.getCategories(SPREADSHEET_ID)).rejects.toThrow(AuthExpiredError);
   });
 
   it('defaults to active when status is unrecognized', async () => {
@@ -145,10 +146,10 @@ describe('SheetsService.getRules', () => {
   });
 
   it('propagates 401 auth errors instead of swallowing them', async () => {
-    mockApiFetch.mockRejectedValue(new Error('401'));
+    mockApiFetch.mockRejectedValue(new AuthExpiredError());
 
     const sheets = new SheetsService(TOKEN);
-    await expect(sheets.getRules(SPREADSHEET_ID)).rejects.toThrow('401');
+    await expect(sheets.getRules(SPREADSHEET_ID)).rejects.toThrow(AuthExpiredError);
   });
 });
 
