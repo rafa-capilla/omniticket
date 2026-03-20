@@ -2,6 +2,7 @@ import type { DriveFilesResponse } from '@/shared/types/google-api';
 import { SHEETS_API, DRIVE_API, SheetName } from '@/lib/constants';
 import { authHeaders, jsonAuthHeaders } from '@/lib/utils';
 import { apiFetch } from '@/infrastructure/google-api/apiFetch';
+import { NotFoundError } from '@/domain/errors';
 
 const FILENAME = 'OmniTicket_DB';
 
@@ -28,14 +29,14 @@ export class DatabaseBootstrap {
   /**
    * Searches Google Drive for the OmniTicket_DB spreadsheet.
    * @returns The spreadsheet ID.
-   * @throws Error("NOT_FOUND") if not found, Error("401") on auth failure.
+   * @throws NotFoundError if not found, AuthExpiredError on auth failure.
    */
   async findSpreadsheet(): Promise<string> {
     const q = encodeURIComponent(`name = '${FILENAME}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`);
     const response = await apiFetch(`${DRIVE_API}?q=${q}`, { headers: this.auth });
     const data: DriveFilesResponse = await response.json();
     const fileId = data.files?.[0]?.id;
-    if (!fileId) throw new Error("NOT_FOUND");
+    if (!fileId) throw new NotFoundError('OmniTicket_DB spreadsheet');
     return String(fileId);
   }
 

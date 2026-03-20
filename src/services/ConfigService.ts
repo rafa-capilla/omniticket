@@ -2,6 +2,7 @@ import type { OmniSettings, SettingKey } from '@/shared/types/domain';
 import { SheetsConfigRepo } from '@/infrastructure/google-api/SheetsConfigRepo';
 import { DatabaseBootstrap } from '@/infrastructure/bootstrap/DatabaseBootstrap';
 import { runMigrations } from '@/infrastructure/bootstrap/migrations';
+import { AuthExpiredError, NotFoundError } from '@/domain/errors';
 
 /**
  * Servicio de gestión de configuración persistente en Google Sheets.
@@ -33,8 +34,8 @@ export class ConfigService {
     try {
       id = await this.getOrFindId();
     } catch (e: unknown) {
-      if (e instanceof Error && e.message === "401") throw e;
-      if (!(e instanceof Error) || e.message !== "NOT_FOUND") throw e;
+      if (e instanceof AuthExpiredError) throw e;
+      if (!(e instanceof NotFoundError)) throw e;
 
       id = await this.bootstrap.createSpreadsheet();
       this.spreadsheetId = id;

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConfigService } from '../ConfigService';
+import { AuthExpiredError, NotFoundError } from '@/domain/errors';
 
 vi.mock('@/infrastructure/google-api/apiFetch', () => ({
   apiFetch: vi.fn(),
@@ -50,18 +51,18 @@ describe('ConfigService.getOrFindId', () => {
     expect(mockApiFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('throws NOT_FOUND when no spreadsheet exists', async () => {
+  it('throws NotFoundError when no spreadsheet exists', async () => {
     mockApiFetch.mockResolvedValue(jsonResponse({ files: [] }));
 
     const config = new ConfigService(TOKEN);
-    await expect(config.getOrFindId()).rejects.toThrow('NOT_FOUND');
+    await expect(config.getOrFindId()).rejects.toThrow(NotFoundError);
   });
 
-  it('throws NOT_FOUND when files array is absent', async () => {
+  it('throws NotFoundError when files array is absent', async () => {
     mockApiFetch.mockResolvedValue(jsonResponse({}));
 
     const config = new ConfigService(TOKEN);
-    await expect(config.getOrFindId()).rejects.toThrow('NOT_FOUND');
+    await expect(config.getOrFindId()).rejects.toThrow(NotFoundError);
   });
 });
 
@@ -245,21 +246,21 @@ describe('ConfigService.updateLastSync', () => {
 // ─── ensureDatabase ─────────────────────────────────────────────────────────
 
 describe('ConfigService.ensureDatabase', () => {
-  it('re-throws 401 errors from getOrFindId', async () => {
-    mockApiFetch.mockRejectedValue(new Error('401'));
+  it('re-throws AuthExpiredError from getOrFindId', async () => {
+    mockApiFetch.mockRejectedValue(new AuthExpiredError());
 
     const config = new ConfigService(TOKEN);
-    await expect(config.ensureDatabase()).rejects.toThrow('401');
+    await expect(config.ensureDatabase()).rejects.toThrow(AuthExpiredError);
   });
 
-  it('re-throws non-NOT_FOUND errors instead of creating duplicates', async () => {
+  it('re-throws non-NotFoundError errors instead of creating duplicates', async () => {
     mockApiFetch.mockRejectedValue(new Error('Error HTTP 500'));
 
     const config = new ConfigService(TOKEN);
     await expect(config.ensureDatabase()).rejects.toThrow('Error HTTP 500');
   });
 
-  it('creates a new spreadsheet when NOT_FOUND', async () => {
+  it('creates a new spreadsheet when NotFoundError', async () => {
     // 1. Drive lookup → no files
     mockApiFetch.mockResolvedValueOnce(jsonResponse({ files: [] }));
     // 2. Create spreadsheet

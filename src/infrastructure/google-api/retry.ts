@@ -1,4 +1,4 @@
-import { getErrorMessage } from '@/lib/utils';
+import { RateLimitError } from '@/domain/errors';
 
 /**
  * Reintenta una función async ante errores de rate-limit (429).
@@ -13,8 +13,7 @@ export async function withRetry<T>(
     try {
       return await fn();
     } catch (err: unknown) {
-      const msg = getErrorMessage(err);
-      const isRateLimit = msg.includes('429') || msg.includes('Rate limit');
+      const isRateLimit = err instanceof RateLimitError;
       const isLastAttempt = attempt === maxAttempts - 1;
 
       if (isLastAttempt || !isRateLimit) throw err;
