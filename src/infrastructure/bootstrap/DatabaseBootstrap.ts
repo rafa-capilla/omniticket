@@ -59,7 +59,10 @@ export class DatabaseBootstrap {
       body: JSON.stringify(spreadsheet)
     });
     const data: { spreadsheetId?: string } = await response.json();
-    const id = String(data.spreadsheetId ?? '');
+    const id = data.spreadsheetId;
+    if (!id) {
+      throw new Error('Google Sheets API returned no spreadsheetId when creating the database');
+    }
 
     await this.initializeSheets(id);
     return id;

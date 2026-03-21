@@ -17,6 +17,14 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
   return res;
 }
 
+/** Type guard for objects with an `error.message` shape (Google API error responses). */
+function hasErrorMessage(body: unknown): body is { error: { message: string } } {
+  if (body === null || typeof body !== 'object') return false;
+  const maybeError = (body as { error?: unknown }).error;
+  if (maybeError === null || typeof maybeError !== 'object') return false;
+  return typeof (maybeError as { message?: unknown }).message === 'string';
+}
+
 /**
  * Extracts a human-readable error message from a Google API JSON error response.
  * Google APIs return errors in the shape: { error: { message: string, ... } }
@@ -26,13 +34,7 @@ export async function extractGoogleApiErrorMessage(res: Response, status: number
   const fallback = `Error HTTP ${status}`;
   try {
     const body: unknown = await res.json();
-    if (body === null || typeof body !== 'object') return fallback;
-
-    const errorField = (body as Record<string, unknown>).error;
-    if (errorField === null || errorField === undefined || typeof errorField !== 'object') return fallback;
-
-    const message = (errorField as Record<string, unknown>).message;
-    return typeof message === 'string' ? message : fallback;
+    return hasErrorMessage(body) ? body.error.message : fallback;
   } catch {
     return fallback;
   }

@@ -5,6 +5,15 @@ import { authHeaders, jsonAuthHeaders } from '@/lib/utils';
 import { apiFetch } from '@/infrastructure/google-api/apiFetch';
 import type { ConfigRepository } from '@/application/ports/ConfigRepository';
 
+const VALID_SETTING_KEYS: ReadonlySet<string> = new Set<SettingKey>([
+  'GMAIL_SEARCH_LABEL', 'GMAIL_PROCESSED_LABEL', 'GEMINI_API_KEY', 'LAST_SYNC',
+]);
+
+/** Type guard that narrows an arbitrary string to a valid SettingKey. */
+function isSettingKey(key: string): key is SettingKey {
+  return VALID_SETTING_KEYS.has(key);
+}
+
 /**
  * Implements the settings read/write portion of ConfigRepository using Google Sheets API.
  * Handles reading and updating key-value settings from the Config sheet.
@@ -26,12 +35,11 @@ export class SheetsConfigRepo {
     const rows = data.values ?? [];
     const settings: OmniSettings = { GMAIL_SEARCH_LABEL: 'OmniTicket', GMAIL_PROCESSED_LABEL: 'OmniTicket/Procesado', GEMINI_API_KEY: '', LAST_SYNC: 'Nunca' };
 
-    const validKeys: ReadonlySet<string> = new Set<SettingKey>(['GMAIL_SEARCH_LABEL', 'GMAIL_PROCESSED_LABEL', 'GEMINI_API_KEY', 'LAST_SYNC']);
     for (const row of rows) {
       const key = (row[0] ?? '').trim();
       const val = (row[1] ?? '').trim();
-      if (validKeys.has(key)) {
-        settings[key as keyof OmniSettings] = val;
+      if (isSettingKey(key)) {
+        settings[key] = val;
       }
     }
     return settings;
