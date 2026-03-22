@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { safeText, safeNum, toLocalDateString, getErrorMessage, roundCurrency, catchNonAuth, aggregateByKey, matchRule, getActiveCategories } from '../utils';
+import { safeText, safeNum, toLocalDateString, getErrorMessage, roundCurrency, catchNonAuth, aggregateByKey, matchRule, getActiveCategories, parseGastosRow } from '../utils';
 import type { Rule, Category } from '@/shared/types/domain';
 import { AuthExpiredError } from '@/domain/errors';
 
@@ -297,5 +297,70 @@ describe('getActiveCategories', () => {
     ];
     const result = getActiveCategories(cats);
     expect(result).toEqual(cats);
+  });
+});
+
+// ─── parseGastosRow ─────────────────────────────────────────────────────────
+
+describe('parseGastosRow', () => {
+  it('parses a complete 10-column row into typed GastosRow', () => {
+    const row = ['uuid-1', 'Mercadona', '2025-01-15', 'LECHE ENTERA 1L', 'Lácteos', '2', '1.05', '0', '2.10', 'Leche Entera'];
+    const result = parseGastosRow(row);
+
+    expect(result).toEqual({
+      id: 'uuid-1',
+      tienda: 'Mercadona',
+      fecha: '2025-01-15',
+      producto: 'LECHE ENTERA 1L',
+      categoria: 'Lácteos',
+      cantidad: 2,
+      precioUnitario: 1.05,
+      descuento: 0,
+      totalLinea: 2.10,
+      nombreNormalizado: 'Leche Entera',
+    });
+  });
+
+  it('handles a short row (fewer than 10 columns) gracefully', () => {
+    const row = ['uuid-2', 'Lidl', '2025-03-01'];
+    const result = parseGastosRow(row);
+
+    expect(result.id).toBe('uuid-2');
+    expect(result.tienda).toBe('Lidl');
+    expect(result.fecha).toBe('2025-03-01');
+    expect(result.producto).toBe('');
+    expect(result.categoria).toBe('');
+    expect(result.cantidad).toBe(0);
+    expect(result.precioUnitario).toBe(0);
+    expect(result.descuento).toBe(0);
+    expect(result.totalLinea).toBe(0);
+    expect(result.nombreNormalizado).toBe('');
+  });
+
+  it('handles an empty row', () => {
+    const result = parseGastosRow([]);
+
+    expect(result.id).toBe('');
+    expect(result.tienda).toBe('');
+    expect(result.totalLinea).toBe(0);
+  });
+
+  it('converts European-format numbers (comma decimal)', () => {
+    const row = ['id', 'Tienda', '2025-01-01', 'Prod', 'Cat', '1', '2,50', '0,10', '2,40', 'Prod Norm'];
+    const result = parseGastosRow(row);
+
+    expect(result.precioUnitario).toBe(2.5);
+    expect(result.descuento).toBe(0.1);
+    expect(result.totalLinea).toBe(2.4);
+  });
+
+  it('correctly parses a TOTAL_TICKET_MARKER row', () => {
+    const row = ['uuid-1', 'Mercadona', '2025-01-15', '--- TOTAL TICKET ---', '', '', '', '', '25.50', ''];
+    const result = parseGastosRow(row);
+
+    expect(result.producto).toBe('--- TOTAL TICKET ---');
+    expect(result.totalLinea).toBe(25.5);
+    expect(result.categoria).toBe('');
+    expect(result.cantidad).toBe(0);
   });
 });
