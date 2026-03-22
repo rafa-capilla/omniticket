@@ -75,7 +75,7 @@ jobs:
       cache_read: ${{ steps.run.outputs.cache_read }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -233,7 +233,7 @@ jobs:
       outcome: ${{ steps.tsc.outputs.outcome }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -320,7 +320,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
