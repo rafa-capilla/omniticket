@@ -186,7 +186,7 @@ describe('AIAnalysisService.analyze', () => {
 
     const svc = new AIAnalysisService();
     await expect(svc.analyze('test', makeAggregatedData(), API_KEY)).rejects.toThrow(
-      'Respuesta de IA no es JSON válido'
+      'Respuesta de Gemini no es JSON válido'
     );
   });
 
