@@ -1,6 +1,9 @@
 /** Marker used in the "Producto" column (D) to identify the total-row of a ticket. */
 export const TOTAL_TICKET_MARKER = '--- TOTAL TICKET ---' as const;
 
+/** Displayed when no category has any spend (e.g. KPI "top category" with no data). */
+export const NO_CATEGORY_LABEL = 'Ninguna' as const;
+
 /**
  * Zero-based column indices for the Gastos sheet (A:J).
  * Matches the header: ID Ticket | Tienda | Fecha | Producto | Categoría | Cantidad | P. Unitario | Descuento | Total Línea | Producto Normalizado

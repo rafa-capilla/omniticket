@@ -369,21 +369,17 @@ describe('ConfigService.ensureDatabase', () => {
     expect(mockApiFetch).toHaveBeenCalledTimes(5);
   });
 
-  it('non-auth migration errors are swallowed (non-fatal)', async () => {
+  it('non-auth migration errors are propagated to the caller', async () => {
     // 1. Drive lookup
     mockApiFetch.mockResolvedValueOnce(
       jsonResponse({ files: [{ id: SPREADSHEET_ID, name: 'OmniTicket_DB' }] })
     );
-    // 2. Migration: metadata fetch fails (non-auth)
+    // 2. Migration: metadata fetch succeeds but internal migration call fails
     mockApiFetch.mockResolvedValueOnce(jsonResponse({ sheets: [] }));
-    // Then internal migration calls may fail
     mockApiFetch.mockRejectedValueOnce(new Error('Network error'));
-    // getSettings should still work
-    mockApiFetch.mockResolvedValueOnce(jsonResponse({ values: [] }));
 
     const config = new ConfigService(TOKEN);
-    // Should not throw - migration errors are non-fatal
-    const result = await config.ensureDatabase();
-    expect(result.dbId).toBe(SPREADSHEET_ID);
+    // Migration errors should propagate — silent swallowing could leave DB inconsistent
+    await expect(config.ensureDatabase()).rejects.toThrow('Network error');
   });
 });

@@ -19,6 +19,7 @@ export async function withRetry<T>(
       if (isLastAttempt || !isRateLimit) throw err;
 
       const waitMs = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+      console.warn(`[withRetry] Rate limit hit, attempt ${attempt + 1}/${maxAttempts}. Retrying in ${waitMs}ms…`);
       await new Promise(r => setTimeout(r, waitMs));
     }
   }

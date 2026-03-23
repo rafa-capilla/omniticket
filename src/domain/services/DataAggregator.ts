@@ -1,6 +1,6 @@
-import type { DashboardStats, AggregatedData, Category } from '@/shared/types/domain';
+import type { DashboardStats, AggregatedData, Category, HistoryTicket } from '@/shared/types/domain';
 import { safeText, safeNum, aggregateByKey } from '@/lib/utils';
-import { TOTAL_TICKET_MARKER, GastosCol } from '@/lib/constants';
+import { TOTAL_TICKET_MARKER, GastosCol, NO_CATEGORY_LABEL } from '@/lib/constants';
 
 /**
  * Pure domain service for aggregating expense data.
@@ -25,7 +25,7 @@ export function calculateKPIs(processedData: string[][]): DashboardStats {
     }
   });
 
-  let topCat = 'Ninguna';
+  let topCat: string = NO_CATEGORY_LABEL;
   let maxVal = -1;
   catMap.forEach((v, k) => { if (v > maxVal) { maxVal = v; topCat = k; } });
 
@@ -136,6 +136,29 @@ export function buildAggregatedData(
     byStore: mapToSorted(storeMap),
     lineItems,
   };
+}
+
+/**
+ * Derives a sorted history of tickets from raw Gastos rows.
+ * Extracts one HistoryTicket per unique ticket ID, using the TOTAL_TICKET_MARKER
+ * row for the total amount. Returns newest-first by fecha.
+ */
+export function deriveHistoryFromLines(lines: string[][]): HistoryTicket[] {
+  const historyMap = new Map<string, HistoryTicket>();
+  for (const row of lines) {
+    const id = safeText(row[GastosCol.ID]);
+    if (!id) continue;
+    const tienda = safeText(row[GastosCol.TIENDA]);
+    const fecha = safeText(row[GastosCol.FECHA]);
+    const producto = safeText(row[GastosCol.PRODUCTO]);
+
+    if (producto === TOTAL_TICKET_MARKER) {
+      historyMap.set(id, { id, tienda, fecha, total: safeNum(row[GastosCol.TOTAL_LINEA]) });
+    } else if (!historyMap.has(id)) {
+      historyMap.set(id, { id, tienda, fecha, total: 0 });
+    }
+  }
+  return Array.from(historyMap.values()).sort((a, b) => b.fecha.localeCompare(a.fecha));
 }
 
 /**
