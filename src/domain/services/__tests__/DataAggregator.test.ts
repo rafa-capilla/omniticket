@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { calculateKPIs, aggregateByLens, buildAggregatedData, filterByDateRange } from '../DataAggregator';
+import { calculateKPIs, aggregateByLens, buildAggregatedData, filterByDateRange, deriveHistoryFromLines } from '../DataAggregator';
 import type { Category } from '@/shared/types/domain';
-import { GastosCol, TOTAL_TICKET_MARKER } from '@/lib/constants';
+import { GastosCol, TOTAL_TICKET_MARKER, NO_CATEGORY_LABEL } from '@/lib/constants';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -87,7 +87,7 @@ describe('calculateKPIs', () => {
 
     const stats = calculateKPIs(data);
 
-    expect(stats.topCategory).toBe('Ninguna');
+    expect(stats.topCategory).toBe(NO_CATEGORY_LABEL);
   });
 
   it('handles empty input', () => {
@@ -95,7 +95,7 @@ describe('calculateKPIs', () => {
 
     expect(stats.totalSpent).toBe(0);
     expect(stats.ticketCount).toBe(0);
-    expect(stats.topCategory).toBe('Ninguna');
+    expect(stats.topCategory).toBe(NO_CATEGORY_LABEL);
     expect(stats.avgTicket).toBe(0);
   });
 });
@@ -347,5 +347,76 @@ describe('buildAggregatedData', () => {
     expect(result.lineItems).toEqual([]);
     // All active categories should appear with 0
     expect(result.byCategory).toHaveLength(3);
+  });
+});
+
+// ─── deriveHistoryFromLines ────────────────────────────────────────────────
+
+describe('deriveHistoryFromLines', () => {
+  it('derives one HistoryTicket per unique ticket ID', () => {
+    const data = [
+      makeRow('Leche', 'Lácteos', '1.20'),
+      makeTotalRow('5.00'),
+    ];
+
+    const result = deriveHistoryFromLines(data);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe('uuid-1');
+    expect(result[0]!.total).toBe(5.00);
+  });
+
+  it('uses total from TOTAL_TICKET_MARKER row', () => {
+    const data = [
+      makeRow('Leche', 'Lácteos', '1.20'),
+      makeRow('Pan', 'Otros', '0.80'),
+      makeTotalRow('2.00'),
+    ];
+
+    const result = deriveHistoryFromLines(data);
+
+    expect(result[0]!.total).toBe(2.00);
+  });
+
+  it('handles tickets with no TOTAL_TICKET_MARKER (total defaults to 0)', () => {
+    const data = [
+      makeRow('Leche', 'Lácteos', '1.20'),
+    ];
+
+    const result = deriveHistoryFromLines(data);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.total).toBe(0);
+  });
+
+  it('sorts results newest-first by fecha', () => {
+    const row1 = makeRow('A', 'Otros', '1.00', { fecha: '2025-01-10' });
+    row1[GastosCol.ID] = 'id-old';
+    const total1 = makeTotalRow('1.00', { fecha: '2025-01-10' });
+    total1[GastosCol.ID] = 'id-old';
+
+    const row2 = makeRow('B', 'Otros', '2.00', { fecha: '2025-02-15' });
+    row2[GastosCol.ID] = 'id-new';
+    const total2 = makeTotalRow('2.00', { fecha: '2025-02-15' });
+    total2[GastosCol.ID] = 'id-new';
+
+    const result = deriveHistoryFromLines([row1, total1, row2, total2]);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]!.id).toBe('id-new');
+    expect(result[1]!.id).toBe('id-old');
+  });
+
+  it('skips rows with empty ID', () => {
+    const row = makeRow('A', 'Otros', '1.00');
+    row[GastosCol.ID] = '';
+
+    const result = deriveHistoryFromLines([row]);
+
+    expect(result).toHaveLength(0);
+  });
+
+  it('returns empty array for empty input', () => {
+    expect(deriveHistoryFromLines([])).toEqual([]);
   });
 });

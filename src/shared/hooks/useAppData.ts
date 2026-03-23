@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { SheetsService } from '@/services/SheetsService';
 import type { HistoryTicket, Rule, Category } from '@/shared/types/domain';
-import { safeText, getErrorMessage, aggregateByKey, parseGastosRow } from '@/lib/utils';
+import { safeText, getErrorMessage, aggregateByKey } from '@/lib/utils';
 import { TOTAL_TICKET_MARKER, GastosCol } from '@/lib/constants';
 import { isAuthError } from '@/domain/errors';
+import { deriveHistoryFromLines } from '@/domain/services/DataAggregator';
 
 interface UseAppDataResult {
   rawLines: string[][];
@@ -40,19 +41,7 @@ export function useAppData(
       setRawLines(lines);
       setRules(r);
       setCategories(cats);
-
-      // Derive history from raw lines
-      const historyMap = new Map<string, HistoryTicket>();
-      lines.forEach((row) => {
-        const parsed = parseGastosRow(row);
-        if (!parsed.id) return;
-        if (parsed.producto === TOTAL_TICKET_MARKER) {
-          historyMap.set(parsed.id, { id: parsed.id, tienda: parsed.tienda, fecha: parsed.fecha, total: parsed.totalLinea });
-        } else if (!historyMap.has(parsed.id)) {
-          historyMap.set(parsed.id, { id: parsed.id, tienda: parsed.tienda, fecha: parsed.fecha, total: 0 });
-        }
-      });
-      setHistory(Array.from(historyMap.values()).sort((a, b) => b.fecha.localeCompare(a.fecha)));
+      setHistory(deriveHistoryFromLines(lines));
     } catch (err: unknown) {
       if (isAuthError(err)) {
         toast.error('Sesión expirada. Haz clic en "Reconectar" para continuar.');

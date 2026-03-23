@@ -27,6 +27,7 @@ export async function runMigrations(accessToken: string, spreadsheetId: string):
   } catch (e: unknown) {
     if (isAuthError(e)) throw e;
     console.error("Error en runMigrations:", e);
+    throw e;
   }
 }
 
