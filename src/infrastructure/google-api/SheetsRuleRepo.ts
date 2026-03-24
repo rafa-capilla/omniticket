@@ -31,7 +31,7 @@ export class SheetsRuleRepo implements RuleRepository {
         normalized: row[1] || '',
         category: row[2] || 'Otros'
       }));
-    } catch (err) {
+    } catch (err: unknown) {
       return catchNonAuth(err, '[SheetsRuleRepo] getRules failed:', []);
     }
   }

@@ -20,9 +20,11 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
 /** Type guard for objects with an `error.message` shape (Google API error responses). */
 function hasErrorMessage(body: unknown): body is { error: { message: string } } {
   if (body === null || typeof body !== 'object') return false;
-  const maybeError = (body as { error?: unknown }).error;
+  if (!('error' in body)) return false;
+  const maybeError: unknown = body.error;
   if (maybeError === null || typeof maybeError !== 'object') return false;
-  return typeof (maybeError as { message?: unknown }).message === 'string';
+  if (!('message' in maybeError)) return false;
+  return typeof maybeError.message === 'string';
 }
 
 /**
