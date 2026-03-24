@@ -31,7 +31,7 @@ export class SheetsCategoryRepo implements CategoryRepository {
         description: String(row[1] || ''),
         status: String(row[2] || '').toLowerCase() === 'inactive' ? 'inactive' as const : 'active' as const,
       })).filter((c: Category) => c.name);
-    } catch (err) {
+    } catch (err: unknown) {
       return catchNonAuth(err, '[SheetsCategoryRepo] getCategories failed:', []);
     }
   }

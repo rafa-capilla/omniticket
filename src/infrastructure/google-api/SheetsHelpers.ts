@@ -39,7 +39,7 @@ export class SheetsHelpers {
       const data: SheetsMetadataResponse = await response.json();
       const sheet = (data.sheets ?? []).find(s => s.properties?.title === sheetName);
       return sheet?.properties?.sheetId ?? null;
-    } catch (err) {
+    } catch (err: unknown) {
       return catchNonAuth(err, `[${context}] getSheetNumericId('${sheetName}') failed:`, null);
     }
   }
