@@ -158,10 +158,14 @@ describe('ConfigService.getSettings', () => {
 // ─── updateSetting ──────────────────────────────────────────────────────────
 
 describe('ConfigService.updateSetting', () => {
-  it('writes to the correct row for GEMINI_API_KEY (row 3)', async () => {
+  it('finds the row by key and writes to the correct cell for GEMINI_API_KEY', async () => {
     // Drive lookup
     mockApiFetch.mockResolvedValueOnce(
       jsonResponse({ files: [{ id: SPREADSHEET_ID, name: 'OmniTicket_DB' }] })
+    );
+    // findSettingRow: read column A
+    mockApiFetch.mockResolvedValueOnce(
+      jsonResponse({ values: [['GMAIL_SEARCH_LABEL'], ['GMAIL_PROCESSED_LABEL'], ['GEMINI_API_KEY'], ['LAST_SYNC']] })
     );
     // PUT update
     mockApiFetch.mockResolvedValueOnce(jsonResponse({}));
@@ -169,38 +173,59 @@ describe('ConfigService.updateSetting', () => {
     const config = new ConfigService(TOKEN);
     await config.updateSetting('GEMINI_API_KEY', '  new-key  ');
 
-    expect(mockApiFetch).toHaveBeenCalledTimes(2);
-    const [url, init] = mockApiFetch.mock.calls[1]!;
+    expect(mockApiFetch).toHaveBeenCalledTimes(3);
+    const [url, init] = mockApiFetch.mock.calls[2]!;
     expect(url).toContain('Settings!B3');
     expect(init?.method).toBe('PUT');
     const body = JSON.parse(init?.body as string);
     expect(body.values).toEqual([['new-key']]);
   });
 
-  it('writes to the correct row for GMAIL_SEARCH_LABEL (row 1)', async () => {
+  it('finds the row by key and writes to the correct cell for GMAIL_SEARCH_LABEL', async () => {
     mockApiFetch.mockResolvedValueOnce(
       jsonResponse({ files: [{ id: SPREADSHEET_ID, name: 'OmniTicket_DB' }] })
+    );
+    mockApiFetch.mockResolvedValueOnce(
+      jsonResponse({ values: [['GMAIL_SEARCH_LABEL'], ['GMAIL_PROCESSED_LABEL'], ['GEMINI_API_KEY'], ['LAST_SYNC']] })
     );
     mockApiFetch.mockResolvedValueOnce(jsonResponse({}));
 
     const config = new ConfigService(TOKEN);
     await config.updateSetting('GMAIL_SEARCH_LABEL', 'MyLabel');
 
-    const [url] = mockApiFetch.mock.calls[1]!;
+    const [url] = mockApiFetch.mock.calls[2]!;
     expect(url).toContain('Settings!B1');
   });
 
-  it('writes to the correct row for GMAIL_PROCESSED_LABEL (row 2)', async () => {
+  it('finds the row by key and writes to the correct cell for GMAIL_PROCESSED_LABEL', async () => {
     mockApiFetch.mockResolvedValueOnce(
       jsonResponse({ files: [{ id: SPREADSHEET_ID, name: 'OmniTicket_DB' }] })
+    );
+    mockApiFetch.mockResolvedValueOnce(
+      jsonResponse({ values: [['GMAIL_SEARCH_LABEL'], ['GMAIL_PROCESSED_LABEL'], ['GEMINI_API_KEY'], ['LAST_SYNC']] })
     );
     mockApiFetch.mockResolvedValueOnce(jsonResponse({}));
 
     const config = new ConfigService(TOKEN);
     await config.updateSetting('GMAIL_PROCESSED_LABEL', 'MyLabel/Done');
 
-    const [url] = mockApiFetch.mock.calls[1]!;
+    const [url] = mockApiFetch.mock.calls[2]!;
     expect(url).toContain('Settings!B2');
+  });
+
+  it('skips update when setting key is not found in sheet', async () => {
+    mockApiFetch.mockResolvedValueOnce(
+      jsonResponse({ files: [{ id: SPREADSHEET_ID, name: 'OmniTicket_DB' }] })
+    );
+    mockApiFetch.mockResolvedValueOnce(
+      jsonResponse({ values: [['OTHER_KEY']] })
+    );
+
+    const config = new ConfigService(TOKEN);
+    await config.updateSetting('GEMINI_API_KEY', 'new-key');
+
+    // Only 2 calls: Drive lookup + findSettingRow (no PUT)
+    expect(mockApiFetch).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -211,14 +236,17 @@ describe('ConfigService.updateGeminiKey', () => {
     mockApiFetch.mockResolvedValueOnce(
       jsonResponse({ files: [{ id: SPREADSHEET_ID, name: 'OmniTicket_DB' }] })
     );
+    mockApiFetch.mockResolvedValueOnce(
+      jsonResponse({ values: [['GMAIL_SEARCH_LABEL'], ['GMAIL_PROCESSED_LABEL'], ['GEMINI_API_KEY'], ['LAST_SYNC']] })
+    );
     mockApiFetch.mockResolvedValueOnce(jsonResponse({}));
 
     const config = new ConfigService(TOKEN);
     await config.updateGeminiKey('my-api-key');
 
-    const [url] = mockApiFetch.mock.calls[1]!;
+    const [url] = mockApiFetch.mock.calls[2]!;
     expect(url).toContain('Settings!B3');
-    const body = JSON.parse(mockApiFetch.mock.calls[1]![1]?.body as string);
+    const body = JSON.parse(mockApiFetch.mock.calls[2]![1]?.body as string);
     expect(body.values).toEqual([['my-api-key']]);
   });
 });
@@ -226,16 +254,21 @@ describe('ConfigService.updateGeminiKey', () => {
 // ─── updateLastSync ─────────────────────────────────────────────────────────
 
 describe('ConfigService.updateLastSync', () => {
-  it('writes current timestamp to Settings!B4', async () => {
+  it('finds LAST_SYNC row dynamically and writes timestamp', async () => {
     mockApiFetch.mockResolvedValueOnce(
       jsonResponse({ files: [{ id: SPREADSHEET_ID, name: 'OmniTicket_DB' }] })
     );
+    // findSettingRow: read column A
+    mockApiFetch.mockResolvedValueOnce(
+      jsonResponse({ values: [['GMAIL_SEARCH_LABEL'], ['GMAIL_PROCESSED_LABEL'], ['GEMINI_API_KEY'], ['LAST_SYNC']] })
+    );
+    // PUT update
     mockApiFetch.mockResolvedValueOnce(jsonResponse({}));
 
     const config = new ConfigService(TOKEN);
     await config.updateLastSync();
 
-    const [url, init] = mockApiFetch.mock.calls[1]!;
+    const [url, init] = mockApiFetch.mock.calls[2]!;
     expect(url).toContain('Settings!B4');
     expect(init?.method).toBe('PUT');
     const body = JSON.parse(init?.body as string);
