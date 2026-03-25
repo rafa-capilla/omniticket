@@ -46,23 +46,40 @@ export class SheetsConfigRepo {
   }
 
   async updateSetting(spreadsheetId: string, key: Exclude<SettingKey, 'LAST_SYNC'>, value: string): Promise<void> {
-    const rowMap: Record<Exclude<SettingKey, 'LAST_SYNC'>, number> = {
-      GMAIL_SEARCH_LABEL: 1,
-      GMAIL_PROCESSED_LABEL: 2,
-      GEMINI_API_KEY: 3,
-    };
-    const row = rowMap[key];
-    if (!row) return;
+    const rowNumber = await this.findSettingRow(spreadsheetId, key);
+    if (rowNumber === null) {
+      console.warn(`[SheetsConfigRepo] Setting key "${key}" not found in sheet — skipping update`);
+      return;
+    }
     await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.SETTINGS}!B${row}?valueInputOption=RAW`,
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.SETTINGS}!B${rowNumber}?valueInputOption=RAW`,
       { method: 'PUT', headers: this.jsonAuth, body: JSON.stringify({ values: [[String(value).trim()]] }) }
     );
   }
 
+  /** Finds the 1-based row number of a setting key by reading column A. */
+  private async findSettingRow(spreadsheetId: string, key: string): Promise<number | null> {
+    const response = await apiFetch(
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.SETTINGS}!A:A`,
+      { headers: this.auth }
+    );
+    const data: SheetsValuesResponse = await response.json();
+    const rows = data.values ?? [];
+    for (let i = 0; i < rows.length; i++) {
+      if ((rows[i]![0] ?? '').trim() === key) return i + 1;
+    }
+    return null;
+  }
+
   async updateLastSync(spreadsheetId: string): Promise<void> {
+    const rowNumber = await this.findSettingRow(spreadsheetId, 'LAST_SYNC');
+    if (rowNumber === null) {
+      console.warn('[SheetsConfigRepo] LAST_SYNC key not found in sheet — skipping update');
+      return;
+    }
     const now = new Date().toLocaleString();
     await apiFetch(
-      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.SETTINGS}!B4?valueInputOption=RAW`,
+      `${SHEETS_API}/${spreadsheetId}/values/${SheetName.SETTINGS}!B${rowNumber}?valueInputOption=RAW`,
       { method: 'PUT', headers: this.jsonAuth, body: JSON.stringify({ values: [[String(now)]] }) }
     );
   }

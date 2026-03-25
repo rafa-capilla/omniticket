@@ -96,12 +96,12 @@ const App: React.FC = () => {
   }
 
   // ─── MAIN (appState === 'READY') ─────────────────────────────────────────────
-  const contextValue = {
+  const contextValue = useMemo(() => ({
     token: token!,
     dbId: dbId!,
     toast,
     loadData,
-  };
+  }), [token, dbId, toast, loadData]);
 
   return (
     <AppContext.Provider value={contextValue}>

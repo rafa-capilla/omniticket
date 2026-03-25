@@ -3,6 +3,7 @@ import { GoogleAuthService } from '@/services/GoogleAuthService';
 import { ConfigService } from '@/services/ConfigService';
 import { getErrorMessage } from '@/lib/utils';
 import { isAuthError } from '@/domain/errors';
+import { TOKEN_REFRESH_CHECK_INTERVAL_MS } from '@/lib/constants';
 
 type AppState = 'LOGIN' | 'LOADING' | 'READY';
 
@@ -50,7 +51,7 @@ export function useAuth(
       if (GoogleAuthService.isTokenExpiringSoon()) {
         GoogleAuthService.silentRefresh();
       }
-    }, 60_000);
+    }, TOKEN_REFRESH_CHECK_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
 

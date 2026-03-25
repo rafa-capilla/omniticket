@@ -20,7 +20,8 @@ export function extractTextFromPayload(payload: GmailPayload): string {
   if (payload.body?.data) {
     try {
       return atob(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
-    } catch {
+    } catch (err: unknown) {
+      console.warn('[GmailGateway] Failed to decode Base64 payload — the email part will be skipped:', err);
       return '';
     }
   }

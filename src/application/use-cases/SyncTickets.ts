@@ -7,6 +7,7 @@ import type { ConfigRepository } from '@/application/ports/ConfigRepository';
 import { withRetry } from '@/infrastructure/google-api/retry';
 import type { SyncResult } from '@/shared/types/domain';
 import { getErrorMessage } from '@/lib/utils';
+import { SYNC_ERROR_DELAY_MS } from '@/lib/constants';
 
 interface SyncTicketsDeps {
   email: EmailGateway;
@@ -76,7 +77,7 @@ export class SyncTickets {
         console.error(`Error en thread ${threadId}:`, error);
         results.push({ messageId: threadId, status: 'error', error: msg });
         onProgress?.(`✗ Ticket ${ticketNum}: ${msg}`);
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, SYNC_ERROR_DELAY_MS));
       }
     }
 

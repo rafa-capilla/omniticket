@@ -44,6 +44,14 @@ export const DEFAULT_CATEGORY_NAMES = [
 
 export type DefaultCategoryName = (typeof DEFAULT_CATEGORY_NAMES)[number];
 
+// ─── Timing ──────────────────────────────────────────────────────────────────
+
+/** Delay in ms between processing tickets after a failure (prevents tight error loops). */
+export const SYNC_ERROR_DELAY_MS = 500;
+
+/** Interval in ms for checking whether the OAuth token needs a silent refresh. */
+export const TOKEN_REFRESH_CHECK_INTERVAL_MS = 60_000;
+
 // ─── AI Model ────────────────────────────────────────────────────────────────
 
 /** Gemini model identifier — single source of truth for all AI calls. */
