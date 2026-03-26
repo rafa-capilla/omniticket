@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Rule, Category, LensType, DashboardStats } from '@/shared/types/domain';
+import type { Rule, Category, LensType, DashboardStats, DateRange } from '@/shared/types/domain';
 import { GastosCol, TOTAL_TICKET_MARKER } from '@/lib/constants';
 import { applyRulesToRows } from '@/domain/services/RuleEngine';
 import { calculateKPIs, aggregateByLens, filterByDateRange } from '@/domain/services/DataAggregator';
@@ -21,7 +21,7 @@ interface UseDataAggregationResult {
  */
 export function useDataAggregation(
   rawLines: string[][],
-  dateRange: { start: string; end: string },
+  dateRange: DateRange,
   rules: Rule[],
   categories: Category[],
   currentLens: LensType,

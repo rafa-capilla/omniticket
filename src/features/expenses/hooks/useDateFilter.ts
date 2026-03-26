@@ -1,10 +1,6 @@
 import { useState } from 'react';
+import type { DateRange } from '@/shared/types/domain';
 import { toLocalDateString } from '@/lib/utils';
-
-interface DateRange {
-  start: string;
-  end: string;
-}
 
 /**
  * Manages date range state with a sensible default (current month).

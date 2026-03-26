@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Rule, Category, LensType } from '@/shared/types/domain';
+import type { Rule, Category, LensType, DateRange } from '@/shared/types/domain';
 import { AIAnalysisView } from '@/features/expenses/components/AIAnalysisView';
 import { safeText, toLocalDateString } from '@/lib/utils';
 import { useDataAggregation } from '@/features/expenses/hooks/useDataAggregation';
@@ -11,8 +11,8 @@ interface Props {
   currentLens: LensType;
   setCurrentLens: (lens: LensType) => void;
   rawLines: string[][];
-  dateRange: { start: string; end: string };
-  setDateRange: React.Dispatch<React.SetStateAction<{ start: string; end: string }>>;
+  dateRange: DateRange;
+  setDateRange: React.Dispatch<React.SetStateAction<DateRange>>;
   rules: Rule[];
   categories: Category[];
 }
