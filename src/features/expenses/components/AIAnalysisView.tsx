@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
-import type { Category, AIAnalysisResult } from '@/shared/types/domain';
+import type { Category, AIAnalysisResult, DateRange } from '@/shared/types/domain';
 import { AIAnalysisService } from '@/services/AIAnalysisService';
 import { useApp } from '@/contexts/AppContext';
 import { COLORS, getErrorMessage } from '@/lib/utils';
@@ -9,7 +9,7 @@ import { useServiceFactory } from '@/shared/hooks/useServiceFactory';
 
 interface Props {
   rawLines: string[][];
-  dateRange: { start: string; end: string };
+  dateRange: DateRange;
   categories: Category[];
 }
 

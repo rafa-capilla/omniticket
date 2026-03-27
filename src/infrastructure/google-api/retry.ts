@@ -9,20 +9,21 @@ export async function withRetry<T>(
   fn: () => Promise<T>,
   maxAttempts = 3
 ): Promise<T> {
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+  let attempt = 0;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
     try {
       return await fn();
     } catch (err: unknown) {
       const isRateLimit = err instanceof RateLimitError;
-      const isLastAttempt = attempt === maxAttempts - 1;
+      const isLastAttempt = attempt >= maxAttempts - 1;
 
       if (isLastAttempt || !isRateLimit) throw err;
 
       const waitMs = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
       console.warn(`[withRetry] Rate limit hit, attempt ${attempt + 1}/${maxAttempts}. Retrying in ${waitMs}ms…`);
       await new Promise(r => setTimeout(r, waitMs));
+      attempt++;
     }
   }
-  // TypeScript exige un return, aunque la lógica nunca llega aquí
-  throw new Error('withRetry: unreachable');
 }

@@ -3,6 +3,12 @@
  * Pure domain concepts — no infrastructure dependencies.
  */
 
+/** Value object representing an inclusive date range (YYYY-MM-DD boundaries). */
+export interface DateRange {
+  start: string;
+  end: string;
+}
+
 export type CategoryStatus = 'active' | 'inactive';
 
 export type SettingKey = 'GMAIL_SEARCH_LABEL' | 'GMAIL_PROCESSED_LABEL' | 'GEMINI_API_KEY' | 'LAST_SYNC';
@@ -74,7 +80,7 @@ export interface AIAnalysisResult {
 }
 
 export interface AggregatedData {
-  period: { start: string; end: string };
+  period: DateRange;
   totalSpent: number;
   ticketCount: number;
   byCategory: { name: string; total: number; percentage: number }[];

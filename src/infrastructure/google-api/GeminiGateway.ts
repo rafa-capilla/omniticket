@@ -113,7 +113,8 @@ function buildExtractionSystemPrompt(categoryList: string): string {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function parseGeminiJsonResponse(responseText: string, context: string): unknown {
+/** Exported for unit testing. */
+export function parseGeminiJsonResponse(responseText: string, context: string): unknown {
   if (!responseText) {
     throw new Error(`Gemini devolvió una respuesta vacía para ${context}`);
   }

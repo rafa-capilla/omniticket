@@ -1,4 +1,4 @@
-import type { DashboardStats, AggregatedData, Category, HistoryTicket } from '@/shared/types/domain';
+import type { DashboardStats, AggregatedData, Category, HistoryTicket, DateRange } from '@/shared/types/domain';
 import { safeText, safeNum, aggregateByKey } from '@/lib/utils';
 import { TOTAL_TICKET_MARKER, GastosCol, NO_CATEGORY_LABEL } from '@/lib/constants';
 
@@ -79,7 +79,7 @@ export function aggregateByLens(
  */
 export function buildAggregatedData(
   rawLines: string[][],
-  dateRange: { start: string; end: string },
+  dateRange: DateRange,
   categories: Category[],
 ): AggregatedData {
   const inRange = rawLines.filter((row: string[]) => {
@@ -166,7 +166,7 @@ export function deriveHistoryFromLines(lines: string[][]): HistoryTicket[] {
  */
 export function filterByDateRange(
   rawLines: string[][],
-  dateRange: { start: string; end: string },
+  dateRange: DateRange,
 ): string[][] {
   return rawLines.filter((row: string[]) => {
     const date = row[GastosCol.FECHA] ?? '';
