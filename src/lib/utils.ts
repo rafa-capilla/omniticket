@@ -4,6 +4,13 @@ import { isAuthError } from '@/domain/errors';
 
 export const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
 
+/** Pattern for YYYY-MM-DD date strings used throughout the app. */
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Returns true if the value is a non-empty string matching YYYY-MM-DD format. */
+export const isValidDateString = (val: string): boolean =>
+  DATE_PATTERN.test(val);
+
 /** Formats a Date as YYYY-MM-DD using local timezone (no UTC shift). */
 export const toLocalDateString = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

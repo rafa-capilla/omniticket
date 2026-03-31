@@ -242,8 +242,22 @@ describe('filterByDateRange', () => {
 
     const result = filterByDateRange(data, { start: '2025-01-01', end: '2025-12-31' });
 
-    // Empty string '' is less than '2025-01-01', so excluded
+    // Empty string fails YYYY-MM-DD validation, so excluded
     expect(result).toHaveLength(0);
+  });
+
+  it('excludes rows with malformed date strings', () => {
+    const data = [
+      makeRow('A', 'Otros', '1.00', { fecha: 'not-a-date' }),
+      makeRow('B', 'Otros', '2.00', { fecha: '15/01/2025' }),
+      makeRow('C', 'Otros', '3.00', { fecha: '2025-1-5' }),
+      makeRow('D', 'Otros', '4.00', { fecha: '2025-01-15' }),
+    ];
+
+    const result = filterByDateRange(data, { start: '2025-01-01', end: '2025-12-31' });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]![GastosCol.PRODUCTO]).toBe('D');
   });
 });
 

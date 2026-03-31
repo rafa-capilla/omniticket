@@ -44,6 +44,15 @@ export const DEFAULT_CATEGORY_NAMES = [
 
 export type DefaultCategoryName = (typeof DEFAULT_CATEGORY_NAMES)[number];
 
+// ─── Sheet Row Indexing ─────────────────────────────────────────────────────
+
+/**
+ * Offset to convert a 0-based array index to a 1-based Sheets row number
+ * that accounts for the header row. Index 0 in the data array corresponds
+ * to row 2 in the sheet (row 1 is the header).
+ */
+export const SHEET_HEADER_OFFSET = 2;
+
 // ─── Timing ──────────────────────────────────────────────────────────────────
 
 /** Delay in ms between processing tickets after a failure (prevents tight error loops). */

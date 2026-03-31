@@ -1,5 +1,6 @@
 import type { CategoryRepository } from '@/application/ports/CategoryRepository';
 import type { RuleRepository } from '@/application/ports/RuleRepository';
+import { SHEET_HEADER_OFFSET } from '@/lib/constants';
 
 /**
  * Use case: Delete a category with cascading updates.
@@ -28,7 +29,7 @@ export class ManageCategories {
 
       const ruleUpdates = allRules.flatMap((rule, i) =>
         rule.category === categoryName
-          ? [this.rules.updateRule(spreadsheetId, i + 2, { ...rule, category: replacement })]
+          ? [this.rules.updateRule(spreadsheetId, i + SHEET_HEADER_OFFSET, { ...rule, category: replacement })]
           : []
       );
       await Promise.all(ruleUpdates);
