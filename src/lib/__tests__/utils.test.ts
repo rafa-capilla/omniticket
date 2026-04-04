@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { safeText, safeNum, toLocalDateString, getErrorMessage, roundCurrency, catchNonAuth, aggregateByKey, matchRule, getActiveCategories, parseGastosRow } from '../utils';
+import { safeText, safeNum, toLocalDateString, getErrorMessage, roundCurrency, catchNonAuth, aggregateByKey, matchRule, getActiveCategories, parseGastosRow, isValidDateString } from '../utils';
 import type { Rule, Category } from '@/shared/types/domain';
 import { AuthExpiredError } from '@/domain/errors';
 
@@ -96,6 +96,43 @@ describe('toLocalDateString', () => {
   it('handles January 1st correctly', () => {
     const d = new Date(2026, 0, 1); // Jan 1, 2026
     expect(toLocalDateString(d)).toBe('2026-01-01');
+  });
+});
+
+// ─── isValidDateString ──────────────────────────────────────────────────────
+
+describe('isValidDateString', () => {
+  it('returns true for a valid YYYY-MM-DD date', () => {
+    expect(isValidDateString('2025-01-15')).toBe(true);
+  });
+
+  it('returns true for boundary dates', () => {
+    expect(isValidDateString('2025-12-31')).toBe(true);
+    expect(isValidDateString('2025-01-01')).toBe(true);
+  });
+
+  it('returns false for empty string', () => {
+    expect(isValidDateString('')).toBe(false);
+  });
+
+  it('returns false for DD/MM/YYYY format', () => {
+    expect(isValidDateString('15/01/2025')).toBe(false);
+  });
+
+  it('returns false for partial date', () => {
+    expect(isValidDateString('2025-01')).toBe(false);
+  });
+
+  it('returns false for date with extra characters', () => {
+    expect(isValidDateString('2025-01-15T00:00:00')).toBe(false);
+  });
+
+  it('returns false for non-date string', () => {
+    expect(isValidDateString('not-a-date')).toBe(false);
+  });
+
+  it('returns false for date without zero-padding', () => {
+    expect(isValidDateString('2025-1-5')).toBe(false);
   });
 });
 

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { Rule, Category } from '@/shared/types/domain';
 import { useApp } from '@/contexts/AppContext';
 import { safeText, getErrorMessage, getActiveCategories } from '@/lib/utils';
+import { SHEET_HEADER_OFFSET } from '@/lib/constants';
 import { useServiceFactory } from '@/shared/hooks/useServiceFactory';
 
 interface Props {
@@ -48,7 +49,7 @@ export const RulesView: React.FC<Props> = ({ rules, categories }) => {
   const handleSaveEdit = async () => {
     if (editingIndex === null) return;
     try {
-      await sheets.updateRule(dbId, editingIndex + 2, editForm); // +2: header + 0-indexed
+      await sheets.updateRule(dbId, editingIndex + SHEET_HEADER_OFFSET, editForm);
       setEditingIndex(null);
       await loadData();
     } catch (err: unknown) {
@@ -166,7 +167,7 @@ export const RulesView: React.FC<Props> = ({ rules, categories }) => {
                       <td className="px-8 py-5 text-[9px] uppercase font-black text-slate-600 group-hover:text-slate-500">{String(r.category)}</td>
                       <td className="px-8 py-5 text-right space-x-3 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => startEdit(i)} className="text-slate-500 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">Editar</button>
-                        <button onClick={() => handleDelete(i + 2, r.pattern)} className="text-red-500/50 hover:text-red-400 text-[10px] font-black uppercase tracking-widest transition-colors">Borrar</button>
+                        <button onClick={() => handleDelete(i + SHEET_HEADER_OFFSET, r.pattern)} className="text-red-500/50 hover:text-red-400 text-[10px] font-black uppercase tracking-widest transition-colors">Borrar</button>
                       </td>
                     </>
                   )}

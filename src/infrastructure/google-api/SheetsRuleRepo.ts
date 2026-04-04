@@ -53,7 +53,9 @@ export class SheetsRuleRepo implements RuleRepository {
 
   async deleteRule(spreadsheetId: string, rowIndex: number): Promise<void> {
     const sheetId = await this.helpers.getSheetNumericId(spreadsheetId, SheetName.RULES, 'SheetsRuleRepo');
-    if (sheetId === null) return;
+    if (sheetId === null) {
+      throw new Error(`No se encontró la hoja "${SheetName.RULES}" en el spreadsheet. Verifica que la base de datos esté correctamente inicializada.`);
+    }
     await this.helpers.deleteRow(spreadsheetId, sheetId, rowIndex);
   }
 }

@@ -1,5 +1,5 @@
 import type { SheetsValuesResponse, SheetsMetadataResponse } from '@/shared/types/google-api';
-import { TOTAL_TICKET_MARKER, GastosCol, SHEETS_API, SheetName } from '@/lib/constants';
+import { TOTAL_TICKET_MARKER, GastosCol, SHEETS_API, SheetName, SHEET_HEADER_OFFSET } from '@/lib/constants';
 import { safeNum, authHeaders, jsonAuthHeaders } from '@/lib/utils';
 import { apiFetch } from '@/infrastructure/google-api/apiFetch';
 import { DatabaseBootstrap } from './DatabaseBootstrap';
@@ -93,7 +93,7 @@ async function migrateDiscountFix(
     const currentTotal = safeNum(row[GastosCol.TOTAL_LINEA]);
     const correct = precioUnitario * cantidad - descuento;
     if (Math.abs(correct - currentTotal) > 0.001) {
-      updates.push({ range: `${SheetName.GASTOS}!I${idx + 2}`, values: [[correct]] });
+      updates.push({ range: `${SheetName.GASTOS}!I${idx + SHEET_HEADER_OFFSET}`, values: [[correct]] });
     }
   });
 

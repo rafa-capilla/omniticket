@@ -1,6 +1,6 @@
 import type { Category } from '@/shared/types/domain';
 import type { SheetsValuesResponse } from '@/shared/types/google-api';
-import { GastosCol, SHEETS_API, SheetName, GASTOS_CATEGORIA_COL_LETTER } from '@/lib/constants';
+import { GastosCol, SHEETS_API, SheetName, GASTOS_CATEGORIA_COL_LETTER, SHEET_HEADER_OFFSET } from '@/lib/constants';
 import { authHeaders, jsonAuthHeaders, catchNonAuth } from '@/lib/utils';
 import { apiFetch } from '@/infrastructure/google-api/apiFetch';
 import { SheetsHelpers } from '@/infrastructure/google-api/SheetsHelpers';
@@ -53,7 +53,9 @@ export class SheetsCategoryRepo implements CategoryRepository {
 
   async deleteCategory(spreadsheetId: string, rowIndex: number): Promise<void> {
     const sheetId = await this.helpers.getSheetNumericId(spreadsheetId, SheetName.CATEGORIES, 'SheetsCategoryRepo');
-    if (sheetId === null) return;
+    if (sheetId === null) {
+      throw new Error(`No se encontró la hoja "${SheetName.CATEGORIES}" en el spreadsheet. Verifica que la base de datos esté correctamente inicializada.`);
+    }
     await this.helpers.deleteRow(spreadsheetId, sheetId, rowIndex);
   }
 
@@ -67,7 +69,7 @@ export class SheetsCategoryRepo implements CategoryRepository {
     const batchData: { range: string; values: string[][] }[] = [];
 
     rows.forEach((row: string[], index: number) => {
-      const rowNum = index + 2;
+      const rowNum = index + SHEET_HEADER_OFFSET;
       if ((row[GastosCol.CATEGORIA] ?? '') === oldName) {
         batchData.push({ range: `${SheetName.GASTOS}!${GASTOS_CATEGORIA_COL_LETTER}${rowNum}`, values: [[newName]] });
       }

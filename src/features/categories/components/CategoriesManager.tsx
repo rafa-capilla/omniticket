@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { Category } from '@/shared/types/domain';
 import { useApp } from '@/contexts/AppContext';
 import { safeText, getErrorMessage } from '@/lib/utils';
+import { SHEET_HEADER_OFFSET } from '@/lib/constants';
 import { useServiceFactory } from '@/shared/hooks/useServiceFactory';
 
 interface Props {
@@ -52,7 +53,7 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
       const original = categories[editingIndex];
       if (!original) return;
       const updated: Category = { ...original, name: editForm.name.trim(), description: editForm.description.trim() };
-      await sheets.updateCategory(dbId, editingIndex + 2, updated); // +2: header + 0-indexed
+      await sheets.updateCategory(dbId, editingIndex + SHEET_HEADER_OFFSET, updated);
       setEditingIndex(null);
       await loadData();
     } catch (err: unknown) {
@@ -78,7 +79,7 @@ export const CategoriesManager: React.FC<Props> = ({ categories, categoryCounts 
   const executeDelete = async (index: number, name: string, replacement: string) => {
     setIsLoading(true);
     try {
-      await manageCategories.deleteWithCascade(dbId, index + 2, name, replacement);
+      await manageCategories.deleteWithCascade(dbId, index + SHEET_HEADER_OFFSET, name, replacement);
       setDeleteModal(null);
       await loadData();
     } catch (err: unknown) {

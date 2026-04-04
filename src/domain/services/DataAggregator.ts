@@ -1,5 +1,5 @@
 import type { DashboardStats, AggregatedData, Category, HistoryTicket, DateRange } from '@/shared/types/domain';
-import { safeText, safeNum, aggregateByKey } from '@/lib/utils';
+import { safeText, safeNum, aggregateByKey, isValidDateString } from '@/lib/utils';
 import { TOTAL_TICKET_MARKER, GastosCol, NO_CATEGORY_LABEL } from '@/lib/constants';
 
 /**
@@ -84,6 +84,7 @@ export function buildAggregatedData(
 ): AggregatedData {
   const inRange = rawLines.filter((row: string[]) => {
     const date = row[GastosCol.FECHA] ?? '';
+    if (!isValidDateString(date)) return false;
     return date >= dateRange.start && date <= dateRange.end;
   });
 
@@ -170,6 +171,7 @@ export function filterByDateRange(
 ): string[][] {
   return rawLines.filter((row: string[]) => {
     const date = row[GastosCol.FECHA] ?? '';
+    if (!isValidDateString(date)) return false;
     return date >= dateRange.start && date <= dateRange.end;
   });
 }
