@@ -1,8 +1,8 @@
 name: Auto-Improve
 
 on:
-  schedule:
-    - cron: '0 13 * * *'
+#  schedule:
+#    - cron: '0 13 * * *'
   workflow_dispatch:
     inputs:
       focus:
